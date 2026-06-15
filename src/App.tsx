@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import './App.css'
 import { createEmptyBoard, type Board } from './game/board'
 import { mergePiece, type Piece } from './game/tetromino'
-import { collides, tryMove } from './game/engine'
+import { collides, tryMove, tryRotate } from './game/engine'
 import { randomPiece } from './game/spawn'
 import { isRedSuit } from './game/cards'
 
@@ -19,21 +19,46 @@ function initialState(): GameState {
   return { board, piece: randomPiece(board[0].length), gameOver: false }
 }
 
-// Un tick di gravità: scende di una riga; se non può, blocca il pezzo
-// e ne genera uno nuovo. Se il nuovo nasce già in collisione: game over.
-function step(state: GameState): GameState {
-  if (state.gameOver) return state
-  const { board, piece } = state
-
-  const moved = tryMove(board, piece, 0, 1)
-  if (moved) return { ...state, piece: moved }
-
+// Blocca il pezzo nella board e ne genera uno nuovo.
+// Se il nuovo nasce già in collisione: game over.
+function lockAndSpawn(board: Board, piece: Piece): GameState {
   const locked = mergePiece(board, piece)
   const next = randomPiece(locked[0].length)
   if (collides(locked, next)) {
     return { board: locked, piece, gameOver: true }
   }
   return { board: locked, piece: next, gameOver: false }
+}
+
+// Un tick di gravità: scende di una riga; se non può, blocca e respawna.
+function step(state: GameState): GameState {
+  if (state.gameOver) return state
+  const moved = tryMove(state.board, state.piece, 0, 1)
+  if (moved) return { ...state, piece: moved }
+  return lockAndSpawn(state.board, state.piece)
+}
+
+// Sposta il pezzo se possibile, altrimenti lascia lo stato invariato.
+function move(state: GameState, dx: number, dy: number): GameState {
+  const moved = tryMove(state.board, state.piece, dx, dy)
+  return moved ? { ...state, piece: moved } : state
+}
+
+// Ruota il pezzo se possibile.
+function rotate(state: GameState): GameState {
+  const rotated = tryRotate(state.board, state.piece)
+  return rotated ? { ...state, piece: rotated } : state
+}
+
+// Caduta istantanea: scende fin dove può, poi blocca e respawna.
+function hardDrop(state: GameState): GameState {
+  let piece = state.piece
+  for (;;) {
+    const next = tryMove(state.board, piece, 0, 1)
+    if (!next) break
+    piece = next
+  }
+  return lockAndSpawn(state.board, piece)
 }
 
 function App() {
@@ -44,6 +69,24 @@ function App() {
     const id = setInterval(() => setState(step), TICK_MS)
     return () => clearInterval(id)
   }, [state.gameOver])
+
+  useEffect(() => {
+    const handlers: Record<string, (s: GameState) => GameState> = {
+      ArrowLeft: (s) => move(s, -1, 0),
+      ArrowRight: (s) => move(s, 1, 0),
+      ArrowDown: (s) => move(s, 0, 1),
+      ArrowUp: rotate,
+      ' ': hardDrop,
+    }
+    function onKey(e: KeyboardEvent) {
+      const handler = handlers[e.key]
+      if (!handler) return
+      e.preventDefault()
+      setState((s) => (s.gameOver ? s : handler(s)))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const { board, piece, gameOver } = state
   const display = gameOver ? board : mergePiece(board, piece)
@@ -71,6 +114,7 @@ function App() {
         )}
         {gameOver && <div className="overlay">Game Over</div>}
       </div>
+      <p className="hint">← → muovi · ↓ giù · ↑ ruota · spazio cade</p>
     </main>
   )
 }

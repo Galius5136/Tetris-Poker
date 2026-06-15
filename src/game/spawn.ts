@@ -21,6 +21,7 @@ export function randomPiece(boardWidth: number): Piece {
     type: pick(TYPES),
     x: Math.floor(boardWidth / 2) - 1,
     y: 0,
+    rotation: 0,
     cards: [randomCard(), randomCard(), randomCard(), randomCard()],
   }
 }

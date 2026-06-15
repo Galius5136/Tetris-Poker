@@ -1,16 +1,24 @@
 .app {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   background: #0f1115;
+}
+
+.hint {
+  margin: 0;
+  color: #6b7180;
+  font-size: 13px;
 }
 
 .board {
   /* --rows è sovrascritto inline da App; il fallback è 20. */
   --rows: 20;
   /* La cella scala per far stare tutta la board nell'altezza finestra. */
-  --cell: min(32px, calc((100vh - 48px) / var(--rows)));
+  --cell: min(32px, calc((100vh - 96px) / var(--rows)));
   position: relative;
   display: grid;
   gap: 1px;

@@ -25,3 +25,10 @@ export function tryMove(
   const moved: Piece = { ...piece, x: piece.x + dx, y: piece.y + dy }
   return collides(board, moved) ? null : moved
 }
+
+// Ruota il pezzo di 90° orari se la nuova posizione non collide.
+// NB: nessun "wall kick" ancora — vicino ai bordi la rotazione può fallire.
+export function tryRotate(board: Board, piece: Piece): Piece | null {
+  const rotated: Piece = { ...piece, rotation: piece.rotation + 1 }
+  return collides(board, rotated) ? null : rotated
+}
