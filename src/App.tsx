@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import './App.css'
-import { createEmptyBoard, type Board } from './game/board'
+import { createEmptyBoard, clearFullRows, type Board } from './game/board'
 import { mergePiece, type Piece } from './game/tetromino'
 import { collides, tryMove, tryRotate } from './game/engine'
 import { randomPiece } from './game/spawn'
@@ -11,23 +11,31 @@ const TICK_MS = 600
 interface GameState {
   board: Board // celle già bloccate
   piece: Piece // pezzo in caduta
+  lines: number // righe completate finora
   gameOver: boolean
 }
 
 function initialState(): GameState {
   const board = createEmptyBoard()
-  return { board, piece: randomPiece(board[0].length), gameOver: false }
+  return {
+    board,
+    piece: randomPiece(board[0].length),
+    lines: 0,
+    gameOver: false,
+  }
 }
 
-// Blocca il pezzo nella board e ne genera uno nuovo.
+// Blocca il pezzo, elimina le righe piene, poi genera un nuovo pezzo.
 // Se il nuovo nasce già in collisione: game over.
-function lockAndSpawn(board: Board, piece: Piece): GameState {
-  const locked = mergePiece(board, piece)
-  const next = randomPiece(locked[0].length)
-  if (collides(locked, next)) {
-    return { board: locked, piece, gameOver: true }
+function lockAndSpawn(board: Board, piece: Piece, lines: number): GameState {
+  const merged = mergePiece(board, piece)
+  const { board: cleared, cleared: n } = clearFullRows(merged)
+  const next = randomPiece(cleared[0].length)
+  const total = lines + n
+  if (collides(cleared, next)) {
+    return { board: cleared, piece, lines: total, gameOver: true }
   }
-  return { board: locked, piece: next, gameOver: false }
+  return { board: cleared, piece: next, lines: total, gameOver: false }
 }
 
 // Un tick di gravità: scende di una riga; se non può, blocca e respawna.
@@ -35,7 +43,7 @@ function step(state: GameState): GameState {
   if (state.gameOver) return state
   const moved = tryMove(state.board, state.piece, 0, 1)
   if (moved) return { ...state, piece: moved }
-  return lockAndSpawn(state.board, state.piece)
+  return lockAndSpawn(state.board, state.piece, state.lines)
 }
 
 // Sposta il pezzo se possibile, altrimenti lascia lo stato invariato.
@@ -58,7 +66,7 @@ function hardDrop(state: GameState): GameState {
     if (!next) break
     piece = next
   }
-  return lockAndSpawn(state.board, piece)
+  return lockAndSpawn(state.board, piece, state.lines)
 }
 
 function App() {
@@ -88,7 +96,7 @@ function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const { board, piece, gameOver } = state
+  const { board, piece, lines, gameOver } = state
   const display = gameOver ? board : mergePiece(board, piece)
   const columns = display[0].length
 
@@ -99,6 +107,7 @@ function App() {
 
   return (
     <main className="app">
+      <p className="score">Righe: {lines}</p>
       <div className="board" style={boardStyle}>
         {display.map((row, y) =>
           row.map((cell, x) => (

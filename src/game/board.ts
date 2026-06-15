@@ -31,3 +31,15 @@ export function placeCard(
     ry === y ? row.map((cell, cx) => (cx === x ? card : cell)) : row,
   )
 }
+
+// Rimuove le righe piene (nessuna cella null), fa scendere il resto e
+// rimette in cima altrettante righe vuote. Altezza invariata. Immutabile.
+export function clearFullRows(board: Board): { board: Board; cleared: number } {
+  const width = board[0].length
+  const kept = board.filter((row) => row.some((cell) => cell === null))
+  const cleared = board.length - kept.length
+  const emptyRows: Board = Array.from({ length: cleared }, () =>
+    Array.from({ length: width }, () => null),
+  )
+  return { board: [...emptyRows, ...kept], cleared }
+}
