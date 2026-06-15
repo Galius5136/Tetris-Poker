@@ -25,3 +25,7 @@ dist-ssr
 
 # Claude Code local settings
 .claude/
+
+# Design reference artifacts (not part of the build)
+/support.js
+/*.dc.html
