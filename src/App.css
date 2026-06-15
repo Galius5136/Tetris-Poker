@@ -11,12 +11,26 @@
   --rows: 20;
   /* La cella scala per far stare tutta la board nell'altezza finestra. */
   --cell: min(32px, calc((100vh - 48px) / var(--rows)));
+  position: relative;
   display: grid;
   gap: 1px;
   padding: 8px;
   background: #1b1f2a;
   border: 2px solid #2c3242;
   border-radius: 6px;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 17, 21, 0.75);
+  color: #f4f1e8;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 1px;
 }
 
 .cell {
