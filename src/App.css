@@ -7,6 +7,10 @@
 }
 
 .board {
+  /* --rows è sovrascritto inline da App; il fallback è 20. */
+  --rows: 20;
+  /* La cella scala per far stare tutta la board nell'altezza finestra. */
+  --cell: min(32px, calc((100vh - 48px) / var(--rows)));
   display: grid;
   gap: 1px;
   padding: 8px;
@@ -16,8 +20,27 @@
 }
 
 .cell {
-  width: 28px;
-  height: 28px;
+  width: var(--cell);
+  height: var(--cell);
   background: #11141c;
   border: 1px solid #1b2030;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--cell) * 0.4);
+  font-weight: 600;
+}
+
+.cell.filled {
+  background: #f4f1e8;
+  border-color: #c9c2ad;
+  border-radius: 3px;
+}
+
+.card.red {
+  color: #d11a2a;
+}
+
+.card.black {
+  color: #1a1a1a;
 }
