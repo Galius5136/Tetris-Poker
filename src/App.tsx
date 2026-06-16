@@ -1,4 +1,10 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
 import './App.css'
 import { createEmptyBoard, clearFullRows } from './game/board'
 import type { Board, FilledCell } from './game/board'
@@ -23,6 +29,7 @@ import {
 } from './game/perks'
 import { CardFace } from './ui/CardFace'
 import { MiniGrid } from './ui/MiniGrid'
+import { loadMeta, saveMeta, bankRun, type MetaState } from './meta/metaGameStore'
 
 interface GameState {
   board: Board
@@ -384,6 +391,21 @@ function Panel({
 
 function App() {
   const [state, setState] = useState<GameState>(() => newGame())
+  const [meta, setMeta] = useState<MetaState>(() => loadMeta())
+  const bankedRef = useRef(false)
+
+  // A fine run: il bankroll finale confluisce nel totale persistente (una
+  // sola volta per run). Non tocca il run loop.
+  useEffect(() => {
+    if (state.gameOver && !bankedRef.current) {
+      bankedRef.current = true
+      setMeta((m) => {
+        const next = bankRun(m, state.bankroll)
+        saveMeta(next)
+        return next
+      })
+    }
+  }, [state.gameOver, state.bankroll])
 
   // Gravità: velocità in base al livello, solo a gioco avviato.
   useEffect(() => {
@@ -481,7 +503,10 @@ function App() {
     }
   }, [])
 
-  const start = () => setState(newGame(true))
+  const start = () => {
+    bankedRef.current = false // nuovo run → il bankroll andrà bancato a fine partita
+    setState(newGame(true))
+  }
   // Applica un'azione solo durante il gioco (per i pulsanti touch).
   const act = (fn: (s: GameState) => GameState) =>
     setState((s) =>
@@ -765,6 +790,10 @@ function App() {
                     <span className="panel-label">RIGHE</span>
                     <span className="over-val">{lines}</span>
                   </div>
+                </div>
+                <div className="over-meta">
+                  Bankroll totale:{' '}
+                  <b className="tp-num">{meta.totalBankroll}</b>
                 </div>
                 <button className="btn" onClick={start}>
                   ↻ RIGIOCA
