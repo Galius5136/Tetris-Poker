@@ -250,6 +250,8 @@ function spawnNext(state: GameState, board: Board): GameState {
 // e il punteggio avvengono dopo, in resolveClear). Altrimenti spawn immediato.
 function lockPiece(state: GameState, piece: Piece): GameState {
   // Pezzi che mutano la board al lock, senza scoring poker (Cat.2).
+  // TODO(sfx): suoni di placement/effetto per i pezzi speciali (laser, cleaver,
+  // bomb, ghost, anchor) — fuori scope del CR, qui solo il marcatore.
   if (piece.special === 'laser') {
     const rows = [...new Set(pieceCells(piece).filter((c) => c.y >= 0).map((c) => c.y))]
     return spawnNext(state, clearRows(state.board, rows))
