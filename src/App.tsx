@@ -25,6 +25,7 @@ import { SUITS, type Suit } from './game/cards'
 import { levelFromLines, tickMs, START_LEVEL } from './game/levels'
 import { difficultyTick, speedMultiplier, MIN_TICK_MS } from './game/difficulty'
 import { tableTarget } from './game/run'
+import { modifierForTable, type TableModifier } from './game/tableModifiers'
 import {
   REEL_CARDS,
   SLOT_COST,
@@ -71,6 +72,8 @@ interface GameState {
   lockKey: number // bumpato a ogni mossa per resettare il timer di lock
   table: number // tavolo corrente del run
   target: number // fiches necessarie per superare il tavolo
+  seed: number // seed del run (selezione deterministica dei modificatori)
+  modifier: TableModifier // modificatore del tavolo corrente (Blind/Boss)
   paused: boolean // Casinò aperto (gioco in pausa)
   levelEnd: boolean // pausa obbligatoria di fine tavolo (minigiochi abilitati)
   game: 'menu' | 'slot' | 'roulette' // schermata del Casinò
@@ -102,8 +105,10 @@ function newGame(
   wildSuit: Suit | null = null,
   deckTemplate: Deck = fullDeck(),
   specials: SpecialRule[] = [],
+  seed = 1,
 ): GameState {
-  const board = createEmptyBoard()
+  const modifier = modifierForTable(1, seed) // tavolo 1 = Standard
+  const board = createEmptyBoard(modifier.boardWidth)
   const width = board[0].length
   const first = drawSpec([], shuffle(deckTemplate), deckTemplate, specials)
   const second = drawSpec(first.bag, first.deck, deckTemplate, specials)
@@ -125,7 +130,9 @@ function newGame(
     grounded: false,
     lockKey: 0,
     table: 1,
-    target: tableTarget(1),
+    target: Math.round(tableTarget(1) * modifier.targetMult),
+    seed,
+    modifier,
     paused: false,
     levelEnd: false,
     game: 'menu',
@@ -303,12 +310,16 @@ function resolveClear(state: GameState): GameState {
     straightGap: cfg.straightGap,
     wildSuit: state.wildSuit,
   }
+  const scoreOnly = state.modifier.scoreOnly // tavolo: solo certe mani pagano
   let clearBest: HandResult | null = null
   let gained = 0
   for (const r of rows) {
     const hand = evalRow((state.board[r] as FilledCell[]).map((c) => c.card), evalOpts)
-    // Cat.1 per-categoria: PAIR_GRINDER ×3, SUIT_PREMIUM ×2, POKER_KICKER (carta alta)
-    gained += handPointsWithConfig(hand.category, HAND_POINTS[hand.category], cfg)
+    const pays = !scoreOnly || scoreOnly.includes(hand.category)
+    if (pays) {
+      // Cat.1 per-categoria: PAIR_GRINDER ×3, SUIT_PREMIUM ×2, POKER_KICKER (carta alta)
+      gained += handPointsWithConfig(hand.category, HAND_POINTS[hand.category], cfg)
+    }
     if (isBetter(hand, clearBest)) clearBest = hand
   }
   if (rows.length > 1) gained *= rows.length // bonus multi-riga
@@ -358,21 +369,24 @@ function resolveClear(state: GameState): GameState {
   // 0, la GRIGLIA riparte vuota, il gioco si FERMA e si apre il Casinò.
   if (progress >= state.target) {
     const table = state.table + 1
+    const modifier = modifierForTable(table, state.seed)
+    const reward = state.modifier.reward.fiches ?? 0 // ricompensa del tavolo superato
     return spawnNext(
       {
         ...base,
         progress: 0,
-        bankroll: state.bankroll + progress,
+        bankroll: state.bankroll + progress + reward,
         scoreKey: state.scoreKey + 1,
         table,
-        target: tableTarget(table),
+        target: Math.round(tableTarget(table) * modifier.targetMult),
+        modifier,
         paused: true,
         levelEnd: true,
         game: 'menu',
         stopped: 0,
         wheelStopped: false,
       },
-      createEmptyBoard(), // griglia pulita per il nuovo tavolo
+      createEmptyBoard(modifier.boardWidth), // griglia pulita, larghezza del tavolo
     )
   }
 
@@ -416,7 +430,7 @@ function hardDrop(state: GameState): GameState {
 }
 
 function holdSwap(state: GameState): GameState {
-  if (!state.canHold) return state
+  if (!state.canHold || state.modifier.disableHold) return state
   const width = state.board[0].length
   const current: PieceSpec = {
     type: state.piece.type,
@@ -542,15 +556,17 @@ function App() {
     }
   }, [state.gameOver, state.bankroll, state.progress])
 
-  // Gravità: la difficoltà accelera a ogni TAVOLO superato; Heavy cade ×2.
+  // Gravità: difficoltà per tavolo × eventuale velocità del modificatore; Heavy ×2.
   const heavyFalling = state.piece.special === 'heavy'
+  const modSpeed = state.modifier.startSpeedMult ?? 1
   useEffect(() => {
     if (!state.started || state.gameOver) return
-    const base = difficultyTick(tickMs(state.level), state.table - 1)
+    let base = difficultyTick(tickMs(state.level), state.table - 1)
+    if (modSpeed !== 1) base = Math.max(MIN_TICK_MS, Math.round(base / modSpeed))
     const ms = heavyFalling ? Math.max(MIN_TICK_MS, Math.round(base / 2)) : base
     const id = setInterval(() => setState(step), ms)
     return () => clearInterval(id)
-  }, [state.started, state.gameOver, state.level, state.table, heavyFalling])
+  }, [state.started, state.gameOver, state.level, state.table, heavyFalling, modSpeed])
 
   // Fine lampeggio righe → pulizia + punteggio + spawn.
   useEffect(() => {
@@ -671,7 +687,7 @@ function App() {
     })
     const specials = buildSpecials(meta.activeJokers) // Cat.2: regole pezzi speciali
     setState(
-      newGame(true, config, startBankroll, wildSuit, deckTemplate, specials),
+      newGame(true, config, startBankroll, wildSuit, deckTemplate, specials, meta.shopSeed),
     )
   }
   // Ref aggiornati a ogni render, per l'handler tastiera (deps []).
@@ -709,13 +725,14 @@ function App() {
   const columns = display[0].length
   const flashSet = new Set(state.flashRows ?? [])
 
-  const ghost = showPiece
-    ? new Set(
-        pieceCells(dropPosition(board, piece))
-          .filter(({ y }) => y >= 0)
-          .map(({ x, y }) => `${y}-${x}`),
-      )
-    : new Set<string>()
+  const ghost =
+    showPiece && !state.modifier.disableGhost
+      ? new Set(
+          pieceCells(dropPosition(board, piece))
+            .filter(({ y }) => y >= 0)
+            .map(({ x, y }) => `${y}-${x}`),
+        )
+      : new Set<string>()
 
   // Celle del pezzo speciale in caduta (per il loro look distinto).
   const specialCells =
@@ -1021,6 +1038,12 @@ function App() {
             <div className="progress-text">
               {progress} / {target} fiches
             </div>
+            {state.modifier.kind !== 'standard' && (
+              <div className={`table-mod table-mod-${state.modifier.kind}`}>
+                <b>{state.modifier.name}</b>
+                <span>{state.modifier.desc}</span>
+              </div>
+            )}
           </Panel>
 
           <Panel label="BANKROLL">
