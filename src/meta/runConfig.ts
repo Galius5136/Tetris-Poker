@@ -19,6 +19,10 @@ export interface RunConfig {
   straightGap: boolean // STRAIGHT_GAP: scala con un buco
   pokerKicker: boolean // POKER_KICKER: la carta alta vale di più
   doubleDown: boolean // DOUBLE_DOWN: tasto D, una volta per run
+  // Cat.4 — composizione del mazzo
+  removeLow: boolean // REMOVE_LOW_CARDS
+  doubleFace: boolean // DOUBLE_FACE_CARDS
+  heartFocus: boolean // SUIT_FOCUS_HEARTS
 }
 
 export const NEUTRAL_CONFIG: RunConfig = {
@@ -32,6 +36,9 @@ export const NEUTRAL_CONFIG: RunConfig = {
   straightGap: false,
   pokerKicker: false,
   doubleDown: false,
+  removeLow: false,
+  doubleFace: false,
+  heartFocus: false,
 }
 
 export const STREAK_BONUS_MULT = 1.15
@@ -49,6 +56,9 @@ export function buildRunConfig(jokers: JokerId[]): RunConfig {
     straightGap: has('STRAIGHT_GAP'),
     pokerKicker: has('POKER_KICKER'),
     doubleDown: has('DOUBLE_DOWN'),
+    removeLow: has('REMOVE_LOW_CARDS'),
+    doubleFace: has('DOUBLE_FACE_CARDS'),
+    heartFocus: has('SUIT_FOCUS_HEARTS'),
   }
 }
 

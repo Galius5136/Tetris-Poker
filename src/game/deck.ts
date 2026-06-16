@@ -1,7 +1,7 @@
 // Mazzo di carte. La costruzione è pura; lo shuffle è IMPURO (Math.random)
 // e tenuto qui isolato.
 
-import { RANKS, SUITS, type Card } from './cards'
+import { RANKS, SUITS, type Card, type Rank } from './cards'
 
 // Il mazzo è la pila di carte ancora da pescare (front = prossima carta).
 export type Deck = Card[]
@@ -29,4 +29,33 @@ export function shuffle<T>(arr: readonly T[]): T[] {
 
 export function shuffledDeck(): Deck {
   return shuffle(fullDeck())
+}
+
+// Opzioni di composizione del mazzo (Cat.4 del meta-shop).
+export interface DeckOptions {
+  removeLow?: boolean // REMOVE_LOW_CARDS: via i 2 e i 3
+  doubleFace?: boolean // DOUBLE_FACE_CARDS: figure ×2
+  heartFocus?: boolean // SUIT_FOCUS_HEARTS: 25% non-cuori → cuori
+}
+
+const FACE_RANKS: Rank[] = ['J', 'Q', 'K']
+
+// Costruisce il mazzo-modello del run dalle opzioni. Puro (deterministico).
+export function buildDeckTemplate(opts: DeckOptions = {}): Deck {
+  let deck = fullDeck()
+  if (opts.removeLow) {
+    deck = deck.filter((c) => c.rank !== '2' && c.rank !== '3')
+  }
+  if (opts.doubleFace) {
+    deck = [...deck, ...deck.filter((c) => FACE_RANKS.includes(c.rank))]
+  }
+  if (opts.heartFocus) {
+    let seen = 0
+    deck = deck.map((c) => {
+      if (c.suit === '♥') return c
+      seen += 1
+      return seen % 4 === 0 ? { rank: c.rank, suit: '♥' } : c
+    })
+  }
+  return deck
 }

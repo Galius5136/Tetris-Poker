@@ -3,7 +3,7 @@
 
 import { SHAPES, type Piece, type TetrominoType } from './tetromino'
 import type { Card } from './cards'
-import { shuffle, shuffledDeck, type Deck } from './deck'
+import { shuffle, fullDeck, type Deck } from './deck'
 
 const ALL_TYPES = Object.keys(SHAPES) as TetrominoType[]
 const CELLS_PER_PIECE = 4
@@ -23,31 +23,32 @@ export function drawType(bag: TetrominoType[]): {
   return { type: b[0], bag: b.slice(1) }
 }
 
-// Garantisce almeno n carte, rabboccando con un mazzo nuovo mescolato.
-function ensure(deck: Deck, n: number): Deck {
+// Garantisce almeno n carte, rabboccando con il mazzo-modello del run mescolato.
+function ensure(deck: Deck, n: number, template: Deck): Deck {
   let d = deck
-  while (d.length < n) d = [...d, ...shuffledDeck()]
+  while (d.length < n) d = [...d, ...shuffle(template)]
   return d
 }
 
-export function drawCards(deck: Deck): {
-  cards: [Card, Card, Card, Card]
-  deck: Deck
-} {
-  const d = ensure(deck, CELLS_PER_PIECE)
+export function drawCards(
+  deck: Deck,
+  template: Deck = fullDeck(),
+): { cards: [Card, Card, Card, Card]; deck: Deck } {
+  const d = ensure(deck, CELLS_PER_PIECE, template)
   return {
     cards: d.slice(0, CELLS_PER_PIECE) as [Card, Card, Card, Card],
     deck: d.slice(CELLS_PER_PIECE),
   }
 }
 
-// Pesca una spec completa (tipo dal bag, carte dal mazzo).
+// Pesca una spec completa (tipo dal bag, carte dal mazzo-modello del run).
 export function drawSpec(
   bag: TetrominoType[],
   deck: Deck,
+  template: Deck = fullDeck(),
 ): { spec: PieceSpec; bag: TetrominoType[]; deck: Deck } {
   const t = drawType(bag)
-  const c = drawCards(deck)
+  const c = drawCards(deck, template)
   return { spec: { type: t.type, cards: c.cards }, bag: t.bag, deck: c.deck }
 }
 

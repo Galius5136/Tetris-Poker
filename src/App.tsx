@@ -12,7 +12,7 @@ import { mergePiece, pieceCells } from './game/tetromino'
 import type { Piece, TetrominoType } from './game/tetromino'
 import { collides, tryMove, tryRotate, dropPosition } from './game/engine'
 import { drawSpec, makePiece, type PieceSpec } from './game/spawn'
-import { shuffledDeck, type Deck } from './game/deck'
+import { shuffle, fullDeck, buildDeckTemplate, type Deck } from './game/deck'
 import { evalRow, HAND_POINTS, type HandResult } from './game/poker'
 import { SUITS, type Suit } from './game/cards'
 import { levelFromLines, tickMs, START_LEVEL } from './game/levels'
@@ -71,6 +71,7 @@ interface GameState {
   wheelStopped: boolean // roulette: ruota ferma (perk assegnato)
   mods: Modifiers // potenziamenti accumulati dai perk (cumulativi)
   config: RunConfig // effetti dei joker equipaggiati, fissati all'avvio del run
+  deckTemplate: Deck // mazzo-modello del run (composizione Cat.4)
   streakPending: boolean // STREAK_BONUS: +15% in attesa per la prossima mano
   wildSuit: Suit | null // FLUSH_WILD_SUIT: seme jolly scelto a inizio run
   doubleDownAvail: boolean // DOUBLE_DOWN: ancora disponibile (una volta per run)
@@ -87,11 +88,12 @@ function newGame(
   config: RunConfig = NEUTRAL_CONFIG,
   startBankroll = 0,
   wildSuit: Suit | null = null,
+  deckTemplate: Deck = fullDeck(),
 ): GameState {
   const board = createEmptyBoard()
   const width = board[0].length
-  const first = drawSpec([], shuffledDeck())
-  const second = drawSpec(first.bag, first.deck)
+  const first = drawSpec([], shuffle(deckTemplate), deckTemplate)
+  const second = drawSpec(first.bag, first.deck, deckTemplate)
   return {
     board,
     piece: makePiece(first.spec, width),
@@ -120,6 +122,7 @@ function newGame(
     wheelStopped: false,
     mods: BASE_MODIFIERS,
     config,
+    deckTemplate,
     streakPending: false,
     wildSuit,
     doubleDownAvail: config.doubleDown,
@@ -218,7 +221,7 @@ function isBetter(a: HandResult, b: HandResult | null): boolean {
 // Genera il prossimo pezzo da next/bag/deck su una board data.
 function spawnNext(state: GameState, board: Board): GameState {
   const piece = makePiece(state.next, board[0].length)
-  const drawn = drawSpec(state.bag, state.deck)
+  const drawn = drawSpec(state.bag, state.deck, state.deckTemplate)
   return {
     ...state,
     board,
@@ -374,7 +377,7 @@ function holdSwap(state: GameState): GameState {
       gameOver: collides(state.board, piece),
     }
   }
-  const drawn = drawSpec(state.bag, state.deck)
+  const drawn = drawSpec(state.bag, state.deck, state.deckTemplate)
   const piece = makePiece(state.next, width)
   return {
     ...state,
@@ -590,7 +593,13 @@ function App() {
     const wildSuit = config.flushWild
       ? SUITS[Math.floor(Math.random() * SUITS.length)]
       : null
-    setState(newGame(true, config, startBankroll, wildSuit))
+    // Cat.4: mazzo-modello del run dalla composizione scelta.
+    const deckTemplate = buildDeckTemplate({
+      removeLow: config.removeLow,
+      doubleFace: config.doubleFace,
+      heartFocus: config.heartFocus,
+    })
+    setState(newGame(true, config, startBankroll, wildSuit, deckTemplate))
   }
   // Ref aggiornati a ogni render, per l'handler tastiera (deps []).
   startRef.current = startRun
