@@ -33,6 +33,14 @@ import { loadMeta, saveMeta, bankRun, type MetaState } from './meta/metaGameStor
 import { selectShop, buyUpgrade } from './meta/shop'
 import { ShopScreen } from './meta/ShopScreen'
 import type { Upgrade, UpgradeId } from './meta/upgrades'
+import {
+  buildRunConfig,
+  handPointsWithConfig,
+  startingBankroll,
+  STREAK_BONUS_MULT,
+  NEUTRAL_CONFIG,
+  type RunConfig,
+} from './meta/runConfig'
 
 interface GameState {
   board: Board
@@ -61,13 +69,19 @@ interface GameState {
   wheelAngle: number // roulette: angolo di rotazione
   wheelStopped: boolean // roulette: ruota ferma (perk assegnato)
   mods: Modifiers // potenziamenti accumulati dai perk (cumulativi)
+  config: RunConfig // effetti dei joker equipaggiati, fissati all'avvio del run
+  streakPending: boolean // STREAK_BONUS: +15% in attesa per la prossima mano
   started: boolean
   gameOver: boolean
 }
 
 const INITIAL_REELS = [0, 3, 6] // rulli sfasati: allineare è una sfida di tempismo
 
-function newGame(started = false): GameState {
+function newGame(
+  started = false,
+  config: RunConfig = NEUTRAL_CONFIG,
+  startBankroll = 0,
+): GameState {
   const board = createEmptyBoard()
   const width = board[0].length
   const first = drawSpec([], shuffledDeck())
@@ -82,7 +96,7 @@ function newGame(started = false): GameState {
     deck: second.deck,
     lines: 0,
     progress: 0,
-    bankroll: 0,
+    bankroll: startBankroll,
     scoreKey: 0,
     level: START_LEVEL,
     best: null,
@@ -99,6 +113,8 @@ function newGame(started = false): GameState {
     wheelAngle: 0,
     wheelStopped: false,
     mods: BASE_MODIFIERS,
+    config,
+    streakPending: false,
     started,
     gameOver: false,
   }
@@ -225,15 +241,22 @@ function resolveClear(state: GameState): GameState {
   const rows = state.flashRows
   if (!rows) return state
 
+  const cfg = state.config
   let clearBest: HandResult | null = null
   let gained = 0
   for (const r of rows) {
     const hand = evalRow((state.board[r] as FilledCell[]).map((c) => c.card))
-    gained += HAND_POINTS[hand.category]
+    // Cat.1 per-categoria: PAIR_GRINDER (×3) e SUIT_PREMIUM (×2)
+    gained += handPointsWithConfig(hand.category, HAND_POINTS[hand.category], cfg)
     if (isBetter(hand, clearBest)) clearBest = hand
   }
   if (rows.length > 1) gained *= rows.length // bonus multi-riga
-  gained = applyModifiers(gained, state.mods) // perk: moltiplicatore + bonus
+  gained = Math.round(gained * cfg.handPayoutMult) // HIGH_ROLLER
+  if (state.streakPending) gained = Math.round(gained * STREAK_BONUS_MULT) // STREAK_BONUS
+  gained = applyModifiers(gained, state.mods) // perk casinò: moltiplicatore + bonus
+
+  // STREAK_BONUS: pulire 3+ righe arma il +15% per la PROSSIMA mano.
+  const streakPending = cfg.streakBonus && rows.length >= 3
 
   const { board, cleared } = clearFullRows(state.board)
   const lines = state.lines + cleared
@@ -242,6 +265,7 @@ function resolveClear(state: GameState): GameState {
   const base = {
     ...state,
     flashRows: null,
+    streakPending,
     lines,
     level: levelFromLines(lines),
     best: clearBest,
@@ -342,9 +366,8 @@ const ARR_MS = 40 // intervallo dell'auto-repeat
 const DIRECTIONS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowDown'])
 
 function reduceKey(s: GameState, k: string): GameState {
-  if (!s.started) {
-    return (k === 'Enter' || k === ' ') && !s.gameOver ? newGame(true) : s
-  }
+  // L'avvio del run è gestito da App (serve il meta per i joker), non qui.
+  if (!s.started) return s
   if (s.gameOver) return s
   if (k === 'p' || k === 'P' || k === 'Escape') {
     return s.paused ? closeCasino(s) : openCasino(s)
@@ -396,6 +419,9 @@ function App() {
   const [state, setState] = useState<GameState>(() => newGame())
   const [meta, setMeta] = useState<MetaState>(() => loadMeta())
   const bankedRef = useRef(false)
+  // Ref letti dall'handler tastiera (che ha deps []), aggiornati a ogni render.
+  const startRef = useRef<() => void>(() => {})
+  const startedRef = useRef(false)
   // Vetrina dello shop: null = chiuso; array = aperto (snapshot stabile).
   const [shopOffers, setShopOffers] = useState<Upgrade[] | null>(null)
 
@@ -488,6 +514,11 @@ function App() {
       if (!HANDLED.includes(e.key)) return
       e.preventDefault()
       if (e.repeat) return // la ripetizione la gestiamo noi
+      // Avvio del run dalla schermata iniziale (applica i joker dal meta).
+      if (!startedRef.current && (e.key === 'Enter' || e.key === ' ')) {
+        startRef.current()
+        return
+      }
       fire(e.key)
       if (DIRECTIONS.has(e.key)) {
         stopRepeat()
@@ -510,10 +541,17 @@ function App() {
     }
   }, [])
 
-  const start = () => {
+  // Avvia un run applicando i joker equipaggiati (config + bankroll iniziale).
+  const startRun = () => {
     bankedRef.current = false // nuovo run → il bankroll andrà bancato a fine partita
-    setState(newGame(true))
+    const config = buildRunConfig(meta.activeJokers)
+    const startBankroll = startingBankroll(config, meta.lastRunBankroll)
+    setState(newGame(true, config, startBankroll))
   }
+  // Ref aggiornati a ogni render, per l'handler tastiera (deps []).
+  startRef.current = startRun
+  startedRef.current = state.started
+
   // Shop tra un run e l'altro: apri (snapshot della vetrina), compra, gioca.
   const openShop = () => setShopOffers(selectShop(meta))
   const buy = (id: UpgradeId) =>
@@ -524,7 +562,7 @@ function App() {
     })
   const playFromShop = () => {
     setShopOffers(null)
-    start()
+    startRun()
   }
   // Applica un'azione solo durante il gioco (per i pulsanti touch).
   const act = (fn: (s: GameState) => GameState) =>
@@ -645,7 +683,7 @@ function App() {
                   Cala i tetromini. Componi la miglior mano su ogni riga. Vinci il
                   banco.
                 </div>
-                <button className="btn" onClick={start}>
+                <button className="btn" onClick={startRun}>
                   PREMI PER INIZIARE
                 </button>
                 <div className="overlay-tip">

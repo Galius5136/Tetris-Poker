@@ -11,6 +11,7 @@ export interface MetaState {
   activeJokers: JokerId[] // equipaggiati per il prossimo run (max 5)
   shopSeed: number // rotazione deterministica dello shop
   runsPlayed: number // run completati (guida la rotazione ogni 3)
+  lastRunBankroll: number // valore finale dell'ultimo run (per Compound Interest)
 }
 
 export const MAX_ACTIVE_JOKERS = 5
@@ -21,6 +22,7 @@ export const INITIAL_META: MetaState = {
   activeJokers: [],
   shopSeed: 1,
   runsPlayed: 0,
+  lastRunBankroll: 0,
 }
 
 const STORAGE_KEY = 'tetris-poker:meta:v1'
@@ -69,9 +71,11 @@ export function saveMeta(
 
 // Banca il bankroll finale del run nel totale e conta il run. Puro.
 export function bankRun(meta: MetaState, finalBankroll: number): MetaState {
+  const worth = Math.max(0, Math.round(finalBankroll))
   return {
     ...meta,
-    totalBankroll: meta.totalBankroll + Math.max(0, Math.round(finalBankroll)),
+    totalBankroll: meta.totalBankroll + worth,
     runsPlayed: meta.runsPlayed + 1,
+    lastRunBankroll: worth,
   }
 }
