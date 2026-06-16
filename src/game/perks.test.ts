@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { REEL_PERKS, BASE_MODIFIERS, applyModifiers } from './perks'
+import { BASE_MODIFIERS, applyModifiers, evalSlot } from './perks'
 
 describe('applyModifiers', () => {
   it('senza perk lascia invariato', () => {
@@ -10,23 +10,23 @@ describe('applyModifiers', () => {
   })
 })
 
-describe('perk del rullo', () => {
-  it('il moltiplicatore ×1.5 raddoppia... no, moltiplica per 1.5', () => {
-    const m15 = REEL_PERKS.find((p) => p.id === 'm15')!
-    const { mods, fiches } = m15.apply(BASE_MODIFIERS)
-    expect(mods.mult).toBe(1.5)
-    expect(fiches).toBe(0)
+describe('evalSlot (allineamenti)', () => {
+  it('tre 7 → moltiplicatore ×2', () => {
+    const o = evalSlot(['7', '7', '7'])
+    expect(o.label).toBe('777')
+    expect(o.apply(BASE_MODIFIERS).mods.mult).toBe(2)
   })
-  it('il perk fiches immediate non tocca i modificatori', () => {
-    const f40 = REEL_PERKS.find((p) => p.id === 'f40')!
-    const { mods, fiches } = f40.apply(BASE_MODIFIERS)
-    expect(fiches).toBe(40)
-    expect(mods).toEqual(BASE_MODIFIERS)
+  it('due diamanti → +60 fiches', () => {
+    const o = evalSlot(['💎', '💎', '7'])
+    expect(o.apply(BASE_MODIFIERS).fiches).toBe(60)
   })
-  it('il bonus per riga si accumula', () => {
-    const bpc = REEL_PERKS.find((p) => p.id === 'bpc')!
-    const once = bpc.apply(BASE_MODIFIERS).mods
-    const twice = bpc.apply(once).mods
-    expect(twice.bonusPerClear).toBe(30)
+  it('tre batte due (priorità al tris)', () => {
+    // tre stelle: deve dare il premio "three", non "two"
+    const o = evalSlot(['⭐', '⭐', '⭐'])
+    expect(o.apply(BASE_MODIFIERS).mods.bonusPerClear).toBe(30)
+  })
+  it('nessuna coppia → consolazione +20', () => {
+    const o = evalSlot(['7', '💎', '⭐'])
+    expect(o.apply(BASE_MODIFIERS).fiches).toBe(20)
   })
 })

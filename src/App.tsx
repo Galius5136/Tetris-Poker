@@ -11,9 +11,10 @@ import { evalRow, HAND_POINTS, type HandResult } from './game/poker'
 import { levelFromLines, tickMs, START_LEVEL } from './game/levels'
 import { tableTarget } from './game/run'
 import {
-  REEL_PERKS,
+  SLOT_SYMBOLS,
   BASE_MODIFIERS,
   applyModifiers,
+  evalSlot,
   type Modifiers,
 } from './game/perks'
 import { CardFace } from './ui/CardFace'
@@ -38,12 +39,14 @@ interface GameState {
   table: number // tavolo corrente del run
   target: number // fiches necessarie per superare il tavolo
   payout: boolean // momento "Banco/Casinò": tavolo superato
-  reelIndex: number // posizione del rullo della slot
-  reelStopped: boolean // il rullo è stato fermato (perk scelto)
+  reels: number[] // posizione dei 3 rulli (indici in SLOT_SYMBOLS)
+  stopped: number // quanti rulli sono già fermi (0..3)
   mods: Modifiers // potenziamenti accumulati dai perk
   started: boolean
   gameOver: boolean
 }
+
+const INITIAL_REELS = [0, 2, 4] // rulli sfasati: allineare è una sfida di tempismo
 
 function newGame(started = false): GameState {
   const board = createEmptyBoard()
@@ -69,20 +72,22 @@ function newGame(started = false): GameState {
     table: 1,
     target: tableTarget(1),
     payout: false,
-    reelIndex: 0,
-    reelStopped: false,
+    reels: INITIAL_REELS,
+    stopped: 0,
     mods: BASE_MODIFIERS,
     started,
     gameOver: false,
   }
 }
 
-// Ferma il rullo della slot e applica il perk sotto la lente (skill, no RNG).
+// Ferma il prossimo rullo (skill, no RNG). Al terzo rullo applica l'esito.
 function stopReel(state: GameState): GameState {
-  if (state.reelStopped) return state
-  const perk = REEL_PERKS[state.reelIndex]
-  const { mods, fiches } = perk.apply(state.mods)
-  return { ...state, reelStopped: true, mods, score: state.score + fiches }
+  if (state.stopped >= 3) return state
+  const stopped = state.stopped + 1
+  if (stopped < 3) return { ...state, stopped }
+  const outcome = evalSlot(state.reels.map((i) => SLOT_SYMBOLS[i]))
+  const { mods, fiches } = outcome.apply(state.mods)
+  return { ...state, stopped, mods, score: state.score + fiches }
 }
 
 // Avanza al tavolo successivo dopo il Casinò.
@@ -93,8 +98,8 @@ function advanceTable(state: GameState): GameState {
     table,
     target: tableTarget(table),
     payout: false,
-    reelIndex: 0,
-    reelStopped: false,
+    reels: INITIAL_REELS,
+    stopped: 0,
   }
 }
 
@@ -253,7 +258,7 @@ function reduceKey(s: GameState, k: string): GameState {
   }
   if (s.payout) {
     if (k !== 'Enter' && k !== ' ') return s
-    return s.reelStopped ? advanceTable(s) : stopReel(s)
+    return s.stopped >= 3 ? advanceTable(s) : stopReel(s)
   }
   if (s.gameOver || s.flashRows) return s
   switch (k) {
@@ -309,18 +314,20 @@ function App() {
     return () => clearTimeout(id)
   }, [state.flashRows])
 
-  // Rullo della slot: scorre a velocità costante finché non lo fermi.
+  // Rulli della slot: quelli non ancora fermati scorrono a velocità costante.
   useEffect(() => {
-    if (!state.payout || state.reelStopped) return
+    if (!state.payout || state.stopped >= 3) return
     const id = setInterval(() => {
-      setState((s) =>
-        s.payout && !s.reelStopped
-          ? { ...s, reelIndex: (s.reelIndex + 1) % REEL_PERKS.length }
-          : s,
-      )
-    }, 140)
+      setState((s) => {
+        if (!s.payout || s.stopped >= 3) return s
+        const reels = s.reels.map((pos, i) =>
+          i >= s.stopped ? (pos + 1) % SLOT_SYMBOLS.length : pos,
+        )
+        return { ...s, reels }
+      })
+    }, 110)
     return () => clearInterval(id)
-  }, [state.payout, state.reelStopped])
+  }, [state.payout, state.stopped])
 
   // Lock delay: quando il pezzo è appoggiato, blocca dopo una breve finestra;
   // ogni mossa/rotazione resetta il timer (dipendenza da lockKey).
@@ -384,7 +391,9 @@ function App() {
     )
 
   const { board, piece, next, hold, lines, score, scoreKey, level, best } = state
-  const { table, target, reelIndex, reelStopped, mods } = state
+  const { table, target, reels, stopped, mods } = state
+  const slotSymbols = reels.map((i) => SLOT_SYMBOLS[i])
+  const slotOutcome = stopped >= 3 ? evalSlot(slotSymbols) : null
   const showPiece = state.started && !state.gameOver && !state.flashRows
   const display = showPiece ? mergePiece(board, piece) : board
   const columns = display[0].length
@@ -504,34 +513,29 @@ function App() {
               <div className="overlay payout">
                 <div className="overlay-kicker">★ CASINÒ ★</div>
                 <div className="slot-title">Tavolo {table} superato</div>
-                <div className="slot">
-                  {REEL_PERKS.map((p, i) => {
-                    const lit = i === reelIndex
-                    const won = reelStopped && lit
-                    return (
-                      <div
-                        key={p.id}
-                        className={`slot-cell${lit ? ' lit' : ''}${won ? ' won' : ''}`}
-                      >
-                        <span className="slot-label">{p.label}</span>
-                        <span className="slot-desc">{p.desc}</span>
-                      </div>
-                    )
-                  })}
+                <div className="slot3">
+                  {slotSymbols.map((sym, i) => (
+                    <div
+                      key={i}
+                      className={`reel${i < stopped ? ' locked' : ' spinning'}`}
+                    >
+                      <span className="reel-sym">{sym}</span>
+                    </div>
+                  ))}
                 </div>
-                {!reelStopped ? (
+                {stopped < 3 ? (
                   <>
                     <button className="btn" onClick={() => setState(stopReel)}>
-                      FERMA
+                      FERMA RULLO {stopped + 1}
                     </button>
                     <div className="overlay-tip">
-                      <b>Spazio</b> per fermare il rullo
+                      <b>Spazio</b> per fermare un rullo alla volta
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="slot-result">
-                      Perk: <b>{REEL_PERKS[reelIndex].desc}</b>
+                      {slotOutcome!.label} — <b>{slotOutcome!.desc}</b>
                     </div>
                     <button className="btn" onClick={() => setState(advanceTable)}>
                       AVANTI · TAVOLO {table + 1}
