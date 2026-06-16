@@ -6,7 +6,13 @@ import {
   type ReactNode,
 } from 'react'
 import './App.css'
-import { createEmptyBoard, clearFullRows, clearRows, clearColumnsFrom } from './game/board'
+import {
+  createEmptyBoard,
+  clearFullRows,
+  clearRows,
+  clearColumnsFrom,
+  clearArea,
+} from './game/board'
 import type { Board, FilledCell } from './game/board'
 import { mergePiece, pieceCells } from './game/tetromino'
 import type { Piece, TetrominoType } from './game/tetromino'
@@ -254,6 +260,40 @@ function lockPiece(state: GameState, piece: Piece): GameState {
     const cols = [...new Set(cells.map((c) => c.x))]
     const fromY = Math.min(...cells.map((c) => c.y)) // dal pezzo in giù
     return spawnNext(state, clearColumnsFrom(state.board, cols, fromY))
+  }
+  if (piece.special === 'bomb') {
+    const cells = pieceCells(piece)
+    const xs = cells.map((c) => c.x)
+    const ys = cells.map((c) => c.y)
+    // esplosione: bounding box del pezzo allargato di 1 in ogni direzione
+    const board = clearArea(
+      state.board,
+      Math.min(...xs) - 1,
+      Math.min(...ys) - 1,
+      Math.max(...xs) + 1,
+      Math.max(...ys) + 1,
+    )
+    return spawnNext(state, board)
+  }
+  if (piece.special === 'ghost') {
+    // attraversa UNA cella occupata: la libera e scende di una riga, poi lock normale.
+    const own = new Set(pieceCells(piece).map((c) => `${c.y}-${c.x}`))
+    const blockers = pieceCells(piece)
+      .map((c) => ({ x: c.x, y: c.y + 1 }))
+      .filter(
+        (c) =>
+          c.y >= 0 &&
+          c.y < state.board.length &&
+          !own.has(`${c.y}-${c.x}`) &&
+          state.board[c.y][c.x] !== null,
+      )
+    const plain: Piece = { ...piece, special: null }
+    if (blockers.length === 0) return lockPiece(state, plain)
+    const target = blockers.reduce((a, b) => (a.y < b.y ? a : b)) // il più in alto
+    const cleared = state.board.map((row, y) =>
+      y === target.y ? row.map((cell, x) => (x === target.x ? null : cell)) : row,
+    )
+    return lockPiece({ ...state, board: cleared }, { ...plain, y: plain.y + 1 })
   }
 
   const merged = mergePiece(state.board, piece)

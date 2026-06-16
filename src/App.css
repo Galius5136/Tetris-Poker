@@ -356,6 +356,31 @@
   font-size: 40cqmin;
   color: #6aa3f2;
 }
+.cell.special-bomb {
+  color: #ef5a5a;
+}
+.cell.special-bomb .card-face::after {
+  content: '✸';
+  position: absolute;
+  top: 2%;
+  right: 8%;
+  font-size: 38cqmin;
+  color: #ef5a5a;
+}
+.cell.special-ghost {
+  color: #8a93b8;
+}
+.cell.special-ghost .card-face {
+  opacity: 0.72;
+}
+.cell.special-ghost .card-face::after {
+  content: '◇';
+  position: absolute;
+  top: 2%;
+  right: 8%;
+  font-size: 36cqmin;
+  color: #8a93b8;
+}
 
 .cell.flash .card-face {
   animation: tpCellFlash 0.44s ease both;

@@ -5,6 +5,7 @@ import {
   clearFullRows,
   clearRows,
   clearColumnsFrom,
+  clearArea,
   type Board,
 } from './board'
 import type { FilledCell } from './board'
@@ -71,5 +72,16 @@ describe('clearColumnsFrom (CLEAVER)', () => {
     const out = clearColumnsFrom(b, [1], 1)
     expect(out[0][1]).toEqual(fill)
     expect(out[2][1]).toBeNull()
+  })
+})
+
+describe('clearArea (BOMB)', () => {
+  it('svuota il rettangolo e lascia il resto, bordi fuori board ignorati', () => {
+    const b = createEmptyBoard(4, 4)
+    b[3][3] = fill // fuori area → resta
+    b[1][1] = fill // dentro → via
+    const out = clearArea(b, 0, 0, 2, 2)
+    expect(out[1][1]).toBeNull()
+    expect(out[3][3]).toEqual(fill)
   })
 })

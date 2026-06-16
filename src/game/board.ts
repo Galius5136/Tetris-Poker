@@ -62,6 +62,22 @@ export function clearRows(board: Board, rows: number[]): Board {
   return [...emptyRows, ...kept]
 }
 
+// Svuota un'area rettangolare [minX..maxX]×[minY..maxY] (BOMB). Bordi fuori
+// dalla board ignorati. Niente compattazione.
+export function clearArea(
+  board: Board,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): Board {
+  return board.map((row, y) =>
+    y < minY || y > maxY
+      ? row
+      : row.map((cell, x) => (x < minX || x > maxX ? cell : null)),
+  )
+}
+
 // Svuota le colonne indicate da `fromY` in giù (CLEAVER). Niente compattazione.
 export function clearColumnsFrom(
   board: Board,

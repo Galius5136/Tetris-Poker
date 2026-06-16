@@ -70,8 +70,11 @@ export function drawSpec(
 ): { spec: PieceSpec; bag: TetrominoType[]; deck: Deck } {
   const t = drawType(bag)
   const c = drawCards(deck, template)
+  const special = rollSpecial(specialRules)
+  // La bomba è una 2×2 → forza la forma O.
+  const type = special === 'bomb' ? 'O' : t.type
   return {
-    spec: { type: t.type, cards: c.cards, special: rollSpecial(specialRules) },
+    spec: { type, cards: c.cards, special },
     bag: t.bag,
     deck: c.deck,
   }
