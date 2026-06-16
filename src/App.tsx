@@ -107,22 +107,54 @@ function App() {
 
   return (
     <main className="app">
-      <p className="score">Righe: {lines}</p>
-      <div className="board" style={boardStyle}>
-        {display.map((row, y) =>
-          row.map((cell, x) => (
-            <div key={`${y}-${x}`} className={cell ? 'cell filled' : 'cell'}>
-              {cell && (
-                <span className={isRedSuit(cell.suit) ? 'card red' : 'card black'}>
-                  {cell.rank}
-                  {cell.suit}
-                </span>
-              )}
+      <header className="topbar">
+        <h1 className="title">
+          TETRIS <span className="title-poker">POKER</span>
+          <span className="suits">♠♥♦♣</span>
+        </h1>
+        <div className="score">
+          <span className="score-label">RIGHE</span>
+          <span className="score-val">{lines}</span>
+        </div>
+      </header>
+
+      <div className="board-frame">
+        <div className="felt">
+          <div className="board" style={boardStyle}>
+            {display.map((row, y) =>
+              row.map((cell, x) => {
+                const tone = cell && isRedSuit(cell.suit) ? 'red' : 'black'
+                return (
+                  <div
+                    key={`${y}-${x}`}
+                    className={cell ? `cell filled ${tone}` : 'cell'}
+                  >
+                    {cell && (
+                      <>
+                        <span className="rank">{cell.rank}</span>
+                        <span className="corner-suit">{cell.suit}</span>
+                        <span className="center-suit">{cell.suit}</span>
+                      </>
+                    )}
+                  </div>
+                )
+              }),
+            )}
+          </div>
+        </div>
+
+        {gameOver && (
+          <div className="overlay">
+            <div className="overlay-kicker">PARTITA TERMINATA</div>
+            <div className="overlay-title">
+              Game
+              <br />
+              Over
             </div>
-          )),
+          </div>
         )}
-        {gameOver && <div className="overlay">Game Over</div>}
       </div>
+
       <p className="hint">← → muovi · ↓ giù · ↑ ruota · spazio cade</p>
     </main>
   )
