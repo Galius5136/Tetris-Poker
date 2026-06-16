@@ -75,3 +75,34 @@ export function evalThreeCardHand(cards: Card[]): SlotOutcome {
     return { label: 'Coppia', desc: 'Moltiplicatore ×1.25', apply: (m) => mult(m, 1.25) }
   return { label: 'Carta Alta', desc: '+8 fiches per riga', apply: (m) => perLine(m, 8) }
 }
+
+// --- Roulette (skill-stop) ---
+
+export const ROULETTE_COST = 150
+
+export interface RouletteSlot {
+  label: string
+  desc: string
+  red: boolean // colore del settore (rosso/nero, stile roulette)
+  apply: (m: Modifiers) => Modifiers
+}
+
+// Settori della ruota (ordine fisso): perk cumulativi sui modificatori.
+export const ROULETTE_SLOTS: RouletteSlot[] = [
+  { label: '×1.3', desc: 'Moltiplicatore ×1.3', red: true, apply: (m) => mult(m, 1.3) },
+  { label: '+10', desc: '+10 fiches per riga', red: false, apply: (m) => perLine(m, 10) },
+  { label: '×1.5', desc: 'Moltiplicatore ×1.5', red: true, apply: (m) => mult(m, 1.5) },
+  { label: '+20', desc: '+20 fiches per riga', red: false, apply: (m) => perLine(m, 20) },
+  { label: '×1.4', desc: 'Moltiplicatore ×1.4', red: true, apply: (m) => mult(m, 1.4) },
+  { label: '+15', desc: '+15 fiches per riga', red: false, apply: (m) => perLine(m, 15) },
+  { label: '×1.8', desc: 'Moltiplicatore ×1.8', red: true, apply: (m) => mult(m, 1.8) },
+  { label: '+5', desc: '+5 fiches per riga', red: false, apply: (m) => perLine(m, 5) },
+]
+
+// Indice del settore sotto il puntatore (in alto) dato l'angolo della ruota.
+export function rouletteIndexAt(angle: number): number {
+  const n = ROULETTE_SLOTS.length
+  const seg = 360 / n
+  const a = ((angle % 360) + 360) % 360
+  return Math.floor(((360 - a) % 360) / seg) % n
+}

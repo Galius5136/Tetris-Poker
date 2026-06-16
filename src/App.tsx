@@ -13,6 +13,9 @@ import { tableTarget } from './game/run'
 import {
   REEL_CARDS,
   SLOT_COST,
+  ROULETTE_COST,
+  ROULETTE_SLOTS,
+  rouletteIndexAt,
   BASE_MODIFIERS,
   applyModifiers,
   evalThreeCardHand,
@@ -42,10 +45,12 @@ interface GameState {
   target: number // fiches necessarie per superare il tavolo
   paused: boolean // Casinò aperto (gioco in pausa)
   levelEnd: boolean // pausa obbligatoria di fine tavolo (minigiochi abilitati)
-  spinning: boolean // un giro di slot pagato è in corso/concluso
-  reels: number[] // posizione dei 3 rulli (indici in REEL_CARDS)
-  stopped: number // quanti rulli sono già fermi (0..3)
-  mods: Modifiers // potenziamenti accumulati dai perk
+  game: 'menu' | 'slot' | 'roulette' // schermata del Casinò
+  reels: number[] // slot: posizione dei 3 rulli (indici in REEL_CARDS)
+  stopped: number // slot: quanti rulli sono già fermi (0..3)
+  wheelAngle: number // roulette: angolo di rotazione
+  wheelStopped: boolean // roulette: ruota ferma (perk assegnato)
+  mods: Modifiers // potenziamenti accumulati dai perk (cumulativi)
   started: boolean
   gameOver: boolean
 }
@@ -78,9 +83,11 @@ function newGame(started = false): GameState {
     target: tableTarget(1),
     paused: false,
     levelEnd: false,
-    spinning: false,
+    game: 'menu',
     reels: INITIAL_REELS,
     stopped: 0,
+    wheelAngle: 0,
+    wheelStopped: false,
     mods: BASE_MODIFIERS,
     started,
     gameOver: false,
@@ -89,26 +96,40 @@ function newGame(started = false): GameState {
 
 // --- Casinò (a richiesta, in pausa) ---
 
+// È in corso un giro pagato (slot o roulette) → non si può chiudere.
+function midRound(s: GameState): boolean {
+  return (
+    (s.game === 'slot' && s.stopped < 3) ||
+    (s.game === 'roulette' && !s.wheelStopped)
+  )
+}
+
 // Apre il Casinò a richiesta, mettendo in pausa il gioco.
 function openCasino(state: GameState): GameState {
   if (!state.started || state.gameOver || state.flashRows || state.paused) {
     return state
   }
-  return { ...state, paused: true, levelEnd: false, spinning: false }
+  return { ...state, paused: true, levelEnd: false, game: 'menu' }
 }
 
 // Chiude il Casinò / prosegue dal fine tavolo (non a metà di un giro pagato).
 function closeCasino(state: GameState): GameState {
-  if (state.spinning && state.stopped < 3) return state
-  return { ...state, paused: false, levelEnd: false, spinning: false }
+  if (midRound(state)) return state
+  return { ...state, paused: false, levelEnd: false, game: 'menu' }
 }
 
-// Avvia un giro di slot: costa SLOT_COST fiches, scalate dal bankroll.
-function startSpin(state: GameState): GameState {
-  if (state.bankroll < SLOT_COST) return state // bankroll insufficiente
+// Torna alla scelta del gioco dopo un giro concluso.
+function backToMenu(state: GameState): GameState {
+  if (midRound(state)) return state
+  return { ...state, game: 'menu' }
+}
+
+// Avvia la slot del poker: costa SLOT_COST dal bankroll.
+function playSlot(state: GameState): GameState {
+  if (state.bankroll < SLOT_COST) return state
   return {
     ...state,
-    spinning: true,
+    game: 'slot',
     stopped: 0,
     reels: INITIAL_REELS,
     bankroll: state.bankroll - SLOT_COST,
@@ -117,11 +138,30 @@ function startSpin(state: GameState): GameState {
 
 // Ferma il prossimo rullo (skill, no RNG). Al terzo applica la mano di poker.
 function stopReel(state: GameState): GameState {
-  if (!state.spinning || state.stopped >= 3) return state
+  if (state.game !== 'slot' || state.stopped >= 3) return state
   const stopped = state.stopped + 1
   if (stopped < 3) return { ...state, stopped }
   const outcome = evalThreeCardHand(state.reels.map((i) => REEL_CARDS[i]))
   return { ...state, stopped, mods: outcome.apply(state.mods) }
+}
+
+// Avvia la roulette: costa ROULETTE_COST dal bankroll.
+function playRoulette(state: GameState): GameState {
+  if (state.bankroll < ROULETTE_COST) return state
+  return {
+    ...state,
+    game: 'roulette',
+    wheelAngle: 0,
+    wheelStopped: false,
+    bankroll: state.bankroll - ROULETTE_COST,
+  }
+}
+
+// Ferma la ruota (skill, no RNG) e applica il perk del settore sotto il puntatore.
+function stopWheel(state: GameState): GameState {
+  if (state.game !== 'roulette' || state.wheelStopped) return state
+  const idx = rouletteIndexAt(state.wheelAngle)
+  return { ...state, wheelStopped: true, mods: ROULETTE_SLOTS[idx].apply(state.mods) }
 }
 
 const LOCK_DELAY_MS = 500
@@ -211,7 +251,9 @@ function resolveClear(state: GameState): GameState {
         target: tableTarget(table),
         paused: true,
         levelEnd: true,
-        spinning: false,
+        game: 'menu',
+        stopped: 0,
+        wheelStopped: false,
       },
       board,
     )
@@ -299,9 +341,9 @@ function reduceKey(s: GameState, k: string): GameState {
   }
   if (s.paused) {
     if (k !== 'Enter' && k !== ' ') return s
-    if (!s.spinning) return startSpin(s) // avvia/paga il giro
-    if (s.stopped < 3) return stopReel(s) // ferma un rullo
-    return startSpin(s) // gioca ancora
+    if (s.game === 'slot') return s.stopped < 3 ? stopReel(s) : backToMenu(s)
+    if (s.game === 'roulette') return !s.wheelStopped ? stopWheel(s) : backToMenu(s)
+    return s // menu: scelta con i bottoni
   }
   if (s.flashRows) return s
   switch (k) {
@@ -359,10 +401,10 @@ function App() {
 
   // Rulli della slot: quelli non ancora fermati scorrono a velocità costante.
   useEffect(() => {
-    if (!state.paused || !state.spinning || state.stopped >= 3) return
+    if (state.game !== 'slot' || state.stopped >= 3) return
     const id = setInterval(() => {
       setState((s) => {
-        if (!s.paused || !s.spinning || s.stopped >= 3) return s
+        if (s.game !== 'slot' || s.stopped >= 3) return s
         const reels = s.reels.map((pos, i) =>
           i >= s.stopped ? (pos + 1) % REEL_CARDS.length : pos,
         )
@@ -370,7 +412,20 @@ function App() {
       })
     }, 110)
     return () => clearInterval(id)
-  }, [state.paused, state.spinning, state.stopped])
+  }, [state.game, state.stopped])
+
+  // Roulette: la ruota gira a velocità costante finché non la fermi.
+  useEffect(() => {
+    if (state.game !== 'roulette' || state.wheelStopped) return
+    const id = setInterval(() => {
+      setState((s) =>
+        s.game === 'roulette' && !s.wheelStopped
+          ? { ...s, wheelAngle: s.wheelAngle + 11 }
+          : s,
+      )
+    }, 40)
+    return () => clearInterval(id)
+  }, [state.game, state.wheelStopped])
 
   // Lock delay: quando il pezzo è appoggiato, blocca dopo una breve finestra;
   // ogni mossa/rotazione resetta il timer (dipendenza da lockKey).
@@ -434,10 +489,12 @@ function App() {
     )
 
   const { board, piece, next, hold, lines, progress, bankroll, scoreKey, level, best } = state
-  const { table, target, reels, stopped, mods, paused, levelEnd, spinning } = state
+  const { table, target, reels, stopped, mods, paused, levelEnd, game } = state
+  const { wheelAngle, wheelStopped } = state
   const slotCards = reels.map((i) => REEL_CARDS[i])
-  const slotOutcome = spinning && stopped >= 3 ? evalThreeCardHand(slotCards) : null
-  const canAfford = bankroll >= SLOT_COST
+  const slotOutcome = game === 'slot' && stopped >= 3 ? evalThreeCardHand(slotCards) : null
+  const rouletteIdx = rouletteIndexAt(wheelAngle)
+  const continueLabel = levelEnd ? `CONTINUA · TAVOLO ${table}` : 'CHIUDI (P)'
   const showPiece = state.started && !state.gameOver && !state.flashRows
   const display = showPiece ? mergePiece(board, piece) : board
   const columns = display[0].length
@@ -558,38 +615,50 @@ function App() {
                 <div className="overlay-kicker">
                   {levelEnd ? `★ TAVOLO ${table - 1} SUPERATO ★` : '★ CASINÒ ★'}
                 </div>
-                <div className="slot-title">Slot del Poker</div>
                 <div className="casino-bank">
                   Bankroll: <b>{bankroll}</b> fiches
                 </div>
 
-                {!spinning ? (
+                {/* --- MENU: scelta del gioco --- */}
+                {game === 'menu' && (
                   <>
-                    <div className="overlay-sub">
-                      Ferma 3 carte e forma una mano: più è alta, migliore è il
-                      perk. Un giro costa {SLOT_COST} fiches.
+                    <div className="game-choice">
+                      <button
+                        className="game-card"
+                        onClick={() => setState(playSlot)}
+                        disabled={bankroll < SLOT_COST}
+                      >
+                        <span className="game-name">🂡 Slot del Poker</span>
+                        <span className="game-info">
+                          Ferma 3 carte, forma una mano
+                        </span>
+                        <span className="game-cost">−{SLOT_COST}</span>
+                      </button>
+                      <button
+                        className="game-card"
+                        onClick={() => setState(playRoulette)}
+                        disabled={bankroll < ROULETTE_COST}
+                      >
+                        <span className="game-name">⊚ Roulette</span>
+                        <span className="game-info">
+                          Ferma la ruota sul settore giusto
+                        </span>
+                        <span className="game-cost">−{ROULETTE_COST}</span>
+                      </button>
                     </div>
-                    <button
-                      className="btn"
-                      onClick={() => setState(startSpin)}
-                      disabled={!canAfford}
-                    >
-                      GIOCA · −{SLOT_COST}
-                    </button>
                     <button
                       className="btn ghost-btn"
                       onClick={() => setState(closeCasino)}
                     >
-                      {levelEnd ? `CONTINUA · TAVOLO ${table}` : 'CHIUDI (P)'}
+                      {continueLabel}
                     </button>
-                    {!canAfford && (
-                      <div className="overlay-tip">
-                        Bankroll insufficiente ({bankroll})
-                      </div>
-                    )}
                   </>
-                ) : (
+                )}
+
+                {/* --- SLOT --- */}
+                {game === 'slot' && (
                   <>
+                    <div className="slot-title">Slot del Poker</div>
                     <div className="slot3">
                       {slotCards.map((card, i) => (
                         <div
@@ -614,21 +683,60 @@ function App() {
                         <div className="slot-result">
                           {slotOutcome!.label} — <b>{slotOutcome!.desc}</b>
                         </div>
-                        <div className="casino-actions">
-                          <button
-                            className="btn"
-                            onClick={() => setState(startSpin)}
-                            disabled={!canAfford}
-                          >
-                            ANCORA · −{SLOT_COST}
-                          </button>
-                          <button
-                            className="btn ghost-btn"
-                            onClick={() => setState(closeCasino)}
-                          >
-                            {levelEnd ? 'CONTINUA' : 'CHIUDI'}
-                          </button>
+                        <button
+                          className="btn ghost-btn"
+                          onClick={() => setState(backToMenu)}
+                        >
+                          ← AI GIOCHI
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+
+                {/* --- ROULETTE --- */}
+                {game === 'roulette' && (
+                  <>
+                    <div className="slot-title">Roulette</div>
+                    <div className="roulette">
+                      <div className="wheel-pointer" />
+                      <div
+                        className="wheel"
+                        style={{ transform: `rotate(${wheelAngle}deg)` }}
+                      />
+                    </div>
+                    <div className="roulette-legend">
+                      {ROULETTE_SLOTS.map((sl, i) => (
+                        <span
+                          key={i}
+                          className={`rl-chip ${sl.red ? 'red' : 'black'}${
+                            i === rouletteIdx ? ' lit' : ''
+                          }`}
+                        >
+                          {sl.label}
+                        </span>
+                      ))}
+                    </div>
+                    {!wheelStopped ? (
+                      <>
+                        <button className="btn" onClick={() => setState(stopWheel)}>
+                          FERMA LA RUOTA
+                        </button>
+                        <div className="overlay-tip">
+                          <b>Spazio</b> per fermare la ruota
                         </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="slot-result">
+                          {ROULETTE_SLOTS[rouletteIdx].desc}
+                        </div>
+                        <button
+                          className="btn ghost-btn"
+                          onClick={() => setState(backToMenu)}
+                        >
+                          ← AI GIOCHI
+                        </button>
                       </>
                     )}
                   </>
