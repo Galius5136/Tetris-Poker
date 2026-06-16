@@ -696,6 +696,7 @@ function App() {
       removeLow: config.removeLow,
       doubleFace: config.doubleFace,
       heartFocus: config.heartFocus,
+      addJokers: config.addJokers,
     })
     const specials = buildSpecials(meta.activeJokers) // Cat.2: regole pezzi speciali
     setState(

@@ -10,6 +10,13 @@ export function CardFace({
   card: Card
   type?: TetrominoType
 }) {
+  if (card.wild) {
+    return (
+      <div className={`card-face wild t-${type ?? 'none'}`}>
+        <span className="wild-mark">★</span>
+      </div>
+    )
+  }
   const tone = isRedSuit(card.suit) ? 'red' : 'black'
   return (
     <div className={`card-face ${tone} t-${type ?? 'none'}`}>

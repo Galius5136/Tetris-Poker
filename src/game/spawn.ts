@@ -7,7 +7,7 @@ import {
   type TetrominoType,
   type SpecialKind,
 } from './tetromino'
-import type { Card } from './cards'
+import { WILD_CARD, type Card } from './cards'
 import { shuffle, fullDeck, type Deck } from './deck'
 
 const ALL_TYPES = Object.keys(SHAPES) as TetrominoType[]
@@ -74,8 +74,13 @@ export function drawSpec(
   // La bomba è una 2×2 (forma O); l'ancora è una barra (forma I).
   const type =
     special === 'bomb' ? 'O' : special === 'anchor' ? 'I' : t.type
+  // WILD: una delle 4 carte del pezzo diventa un jolly.
+  const cards: [Card, Card, Card, Card] =
+    special === 'wild'
+      ? [{ ...WILD_CARD }, c.cards[1], c.cards[2], c.cards[3]]
+      : c.cards
   return {
-    spec: { type, cards: c.cards, special },
+    spec: { type, cards, special },
     bag: t.bag,
     deck: c.deck,
   }

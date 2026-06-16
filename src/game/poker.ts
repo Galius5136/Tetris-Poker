@@ -1,7 +1,7 @@
 // Valutazione di mani di poker — logica pura, nessun React.
 // Parametrizzabile con gli effetti del meta-shop (Cat.3) via EvalOptions.
 
-import type { Card, Rank, Suit } from './cards'
+import { SUITS, RANKS, type Card, type Rank, type Suit } from './cards'
 
 // 1 = carta alta ... 9 = scala reale/colore, 10 = poker di 5 (Joker Rule).
 export type HandCategory = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
@@ -32,6 +32,26 @@ export const HAND_POINTS: Record<HandCategory, number> = {
 
 // Valuta esattamente 5 carte.
 function scoreFive(cards: Card[], opts: EvalOptions = {}): HandResult {
+  // Jolly: prova ogni sostituzione (seme×valore) e tieni la mano migliore.
+  const wildIdx = cards.findIndex((c) => c.wild)
+  if (wildIdx !== -1) {
+    let best: HandResult | null = null
+    for (const suit of SUITS) {
+      for (const rank of RANKS) {
+        const sub = cards.map((c, i) => (i === wildIdx ? { suit, rank } : c))
+        const r = scoreFive(sub, opts)
+        if (
+          !best ||
+          r.category > best.category ||
+          (r.category === best.category && r.tie > best.tie)
+        ) {
+          best = r
+        }
+      }
+    }
+    return { ...(best as HandResult), cards } // carte originali (col jolly) per il display
+  }
+
   const vals = cards.map((c) => RANK_VALUE[c.rank]).sort((a, b) => b - a)
 
   // Colore: con wildSuit, le carte del seme jolly contano come il seme dominante.

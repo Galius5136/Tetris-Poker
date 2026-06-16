@@ -69,3 +69,15 @@ describe('EvalOptions (modificatori dei joker)', () => {
     expect(evalRow(hand, { wildSuit: '♥' }).category).toBe(6) // cuori jolly → colore
   })
 })
+
+describe('carte jolly (wild)', () => {
+  const wild: Card = { rank: 'A', suit: '♠', wild: true }
+  it('coppia + jolly → tris', () => {
+    const hand = [c('A', '♠'), c('A', '♥'), wild, c('K', '♣'), c('2', '♦')]
+    expect(evalRow(hand).category).toBe(4) // tris
+  })
+  it('4 picche + jolly → colore', () => {
+    const hand = [c('A', '♠'), c('K', '♠'), c('9', '♠'), c('7', '♠'), wild]
+    expect(evalRow(hand).category).toBe(6) // colore
+  })
+})

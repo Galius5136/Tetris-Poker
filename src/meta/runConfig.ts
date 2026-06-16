@@ -25,6 +25,7 @@ export interface RunConfig {
   removeLow: boolean // REMOVE_LOW_CARDS
   doubleFace: boolean // DOUBLE_FACE_CARDS
   heartFocus: boolean // SUIT_FOCUS_HEARTS
+  addJokers: boolean // ADD_JOKER_CARDS: +2 jolly nel mazzo
   // Cat.2 — pezzi speciali (abilità)
   mirror: boolean // MIRROR_PIECE: tasto M
 }
@@ -43,6 +44,7 @@ export const NEUTRAL_CONFIG: RunConfig = {
   removeLow: false,
   doubleFace: false,
   heartFocus: false,
+  addJokers: false,
   mirror: false,
 }
 
@@ -64,6 +66,7 @@ export function buildRunConfig(jokers: JokerId[]): RunConfig {
     removeLow: has('REMOVE_LOW_CARDS'),
     doubleFace: has('DOUBLE_FACE_CARDS'),
     heartFocus: has('SUIT_FOCUS_HEARTS'),
+    addJokers: has('ADD_JOKER_CARDS'),
     mirror: has('MIRROR_PIECE'),
   }
 }
@@ -87,6 +90,7 @@ const IMPLEMENTED_KINDS: ReadonlySet<SpecialKind> = new Set<SpecialKind>([
   'bomb',
   'ghost',
   'anchor',
+  'wild',
 ])
 
 // Regole di spawn dei pezzi speciali dai joker equipaggiati.

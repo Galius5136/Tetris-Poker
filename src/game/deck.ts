@@ -1,7 +1,7 @@
 // Mazzo di carte. La costruzione è pura; lo shuffle è IMPURO (Math.random)
 // e tenuto qui isolato.
 
-import { RANKS, SUITS, type Card, type Rank } from './cards'
+import { RANKS, SUITS, WILD_CARD, type Card, type Rank } from './cards'
 
 // Il mazzo è la pila di carte ancora da pescare (front = prossima carta).
 export type Deck = Card[]
@@ -36,6 +36,7 @@ export interface DeckOptions {
   removeLow?: boolean // REMOVE_LOW_CARDS: via i 2 e i 3
   doubleFace?: boolean // DOUBLE_FACE_CARDS: figure ×2
   heartFocus?: boolean // SUIT_FOCUS_HEARTS: 25% non-cuori → cuori
+  addJokers?: boolean // ADD_JOKER_CARDS: +2 jolly nel mazzo
 }
 
 const FACE_RANKS: Rank[] = ['J', 'Q', 'K']
@@ -56,6 +57,9 @@ export function buildDeckTemplate(opts: DeckOptions = {}): Deck {
       seen += 1
       return seen % 4 === 0 ? { rank: c.rank, suit: '♥' } : c
     })
+  }
+  if (opts.addJokers) {
+    deck = [...deck, { ...WILD_CARD }, { ...WILD_CARD }]
   }
   return deck
 }

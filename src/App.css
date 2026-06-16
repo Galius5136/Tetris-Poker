@@ -399,6 +399,23 @@
     0 0 2cqmin 0.5cqmin rgba(70, 201, 139, 0.5);
 }
 
+/* carta jolly */
+.card-face.wild {
+  background: linear-gradient(150deg, #2a1746, #3a1f5e 60%, #251340);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wild-mark {
+  font-size: 56cqmin;
+  line-height: 1;
+  color: #e9c6ff;
+  text-shadow: 0 0 2cqmin rgba(191, 134, 239, 0.9);
+}
+.cell.special-wild {
+  color: #bf86ef;
+}
+
 .cell.flash .card-face {
   animation: tpCellFlash 0.44s ease both;
   box-shadow:

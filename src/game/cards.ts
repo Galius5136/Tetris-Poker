@@ -9,7 +9,11 @@ export type Rank =
 export interface Card {
   suit: Suit
   rank: Rank
+  wild?: boolean // jolly: vale qualsiasi seme/valore nel poker
 }
+
+// Carta jolly (ADD_JOKER_CARDS / WILDCARD_PIECE). Seme/valore sono placeholder.
+export const WILD_CARD: Card = { suit: '♠', rank: 'A', wild: true }
 
 export const SUITS: Suit[] = ['♠', '♥', '♦', '♣']
 
