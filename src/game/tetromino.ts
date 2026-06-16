@@ -1,6 +1,6 @@
 // Tetromini — dati e geometria puri, nessun React.
 
-import { type Board, placeCard } from './board'
+import { type Board, placeCell } from './board'
 import type { Card } from './cards'
 
 export type TetrominoType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L'
@@ -61,7 +61,8 @@ export function pieceCells(
 // Ritorna una NUOVA board con il pezzo "appoggiato" sopra. Immutabile.
 export function mergePiece(board: Board, piece: Piece): Board {
   return pieceCells(piece).reduce(
-    (b, { x, y, card }) => placeCard(b, x, y, card),
+    (b, { x, y, card }) =>
+      y >= 0 ? placeCell(b, x, y, { card, type: piece.type }) : b,
     board,
   )
 }

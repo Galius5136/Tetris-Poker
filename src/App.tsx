@@ -1,48 +1,72 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import './App.css'
-import { createEmptyBoard, clearFullRows, type Board } from './game/board'
-import { mergePiece, pieceCells, type Piece } from './game/tetromino'
+import { createEmptyBoard, clearFullRows } from './game/board'
+import type { Board, FilledCell } from './game/board'
+import { mergePiece, pieceCells } from './game/tetromino'
+import type { Piece, TetrominoType } from './game/tetromino'
 import { collides, tryMove, tryRotate, dropPosition } from './game/engine'
-import { spawnPiece } from './game/spawn'
+import { drawSpec, makePiece, type PieceSpec } from './game/spawn'
 import { shuffledDeck, type Deck } from './game/deck'
-import { isRedSuit, type Card } from './game/cards'
 import { evalRow, HAND_POINTS, type HandResult } from './game/poker'
-
-const TICK_MS = 600
+import { levelFromLines, tickMs, START_LEVEL } from './game/levels'
+import { CardFace } from './ui/CardFace'
+import { MiniGrid } from './ui/MiniGrid'
 
 interface GameState {
-  board: Board // celle già bloccate
-  piece: Piece // pezzo in caduta
-  deck: Deck // carte ancora da pescare
-  lines: number // righe completate finora
-  score: number // punti (dalle mani di poker)
-  best: HandResult | null // miglior mano dell'ultimo clear
+  board: Board
+  piece: Piece
+  next: PieceSpec
+  hold: PieceSpec | null
+  canHold: boolean
+  bag: TetrominoType[]
+  deck: Deck
+  lines: number
+  score: number
+  scoreKey: number // ri-triggera l'animazione del punteggio sui clear
+  level: number
+  best: HandResult | null
+  started: boolean
   gameOver: boolean
 }
 
-function initialState(): GameState {
+function newGame(started = false): GameState {
   const board = createEmptyBoard()
-  const { piece, deck } = spawnPiece(shuffledDeck(), board[0].length)
-  return { board, piece, deck, lines: 0, score: 0, best: null, gameOver: false }
+  const width = board[0].length
+  const first = drawSpec([], shuffledDeck())
+  const second = drawSpec(first.bag, first.deck)
+  return {
+    board,
+    piece: makePiece(first.spec, width),
+    next: second.spec,
+    hold: null,
+    canHold: true,
+    bag: second.bag,
+    deck: second.deck,
+    lines: 0,
+    score: 0,
+    scoreKey: 0,
+    level: START_LEVEL,
+    best: null,
+    started,
+    gameOver: false,
+  }
 }
 
-// Confronta due mani: true se a è migliore di b (o b è null).
 function isBetter(a: HandResult, b: HandResult | null): boolean {
   return !b || a.category > b.category || (a.category === b.category && a.tie > b.tie)
 }
 
-// Blocca il `piece`, valuta le righe piene (poker), le elimina, pesca un nuovo pezzo.
+// Blocca il `piece`, valuta+elimina le righe piene, pesca dal next/bag/deck.
 function lockAndSpawn(state: GameState, piece: Piece): GameState {
   const merged = mergePiece(state.board, piece)
 
-  // Righe piene PRIMA della rimozione, per valutare le mani.
   const fullRows = merged.filter((row) => row.every((cell) => cell !== null))
   let best = state.best
   let gained = 0
   if (fullRows.length > 0) {
     let clearBest: HandResult | null = null
     for (const row of fullRows) {
-      const hand = evalRow(row as Card[])
+      const hand = evalRow((row as FilledCell[]).map((c) => c.card))
       gained += HAND_POINTS[hand.category]
       if (isBetter(hand, clearBest)) clearBest = hand
     }
@@ -51,82 +75,161 @@ function lockAndSpawn(state: GameState, piece: Piece): GameState {
   }
 
   const { board, cleared } = clearFullRows(merged)
-  const { piece: next, deck } = spawnPiece(state.deck, board[0].length)
+  const lines = state.lines + cleared
+  const piece2 = makePiece(state.next, board[0].length)
+  const drawn = drawSpec(state.bag, state.deck)
+
   return {
+    ...state,
     board,
-    piece: next,
-    deck,
-    lines: state.lines + cleared,
+    piece: piece2,
+    next: drawn.spec,
+    bag: drawn.bag,
+    deck: drawn.deck,
+    canHold: true,
+    lines,
+    level: levelFromLines(lines),
     score: state.score + gained,
+    scoreKey: gained > 0 ? state.scoreKey + 1 : state.scoreKey,
     best,
-    gameOver: collides(board, next),
+    gameOver: collides(board, piece2),
   }
 }
 
-// Un tick di gravità: scende di una riga; se non può, blocca e respawna.
 function step(state: GameState): GameState {
-  if (state.gameOver) return state
+  if (!state.started || state.gameOver) return state
   const moved = tryMove(state.board, state.piece, 0, 1)
   if (moved) return { ...state, piece: moved }
   return lockAndSpawn(state, state.piece)
 }
 
-// Sposta il pezzo se possibile, altrimenti lascia lo stato invariato.
 function move(state: GameState, dx: number, dy: number): GameState {
   const moved = tryMove(state.board, state.piece, dx, dy)
   return moved ? { ...state, piece: moved } : state
 }
 
-// Ruota il pezzo se possibile.
+function softDrop(state: GameState): GameState {
+  const moved = tryMove(state.board, state.piece, 0, 1)
+  return moved ? { ...state, piece: moved, score: state.score + 1 } : state
+}
+
 function rotate(state: GameState): GameState {
   const rotated = tryRotate(state.board, state.piece)
   return rotated ? { ...state, piece: rotated } : state
 }
 
-// Caduta istantanea: scende fin dove può, poi blocca e respawna.
 function hardDrop(state: GameState): GameState {
   return lockAndSpawn(state, dropPosition(state.board, state.piece))
 }
 
-function App() {
-  const [state, setState] = useState<GameState>(initialState)
-
-  useEffect(() => {
-    if (state.gameOver) return
-    const id = setInterval(() => setState(step), TICK_MS)
-    return () => clearInterval(id)
-  }, [state.gameOver])
-
-  useEffect(() => {
-    const handlers: Record<string, (s: GameState) => GameState> = {
-      ArrowLeft: (s) => move(s, -1, 0),
-      ArrowRight: (s) => move(s, 1, 0),
-      ArrowDown: (s) => move(s, 0, 1),
-      ArrowUp: rotate,
-      ' ': hardDrop,
+function holdSwap(state: GameState): GameState {
+  if (!state.canHold) return state
+  const width = state.board[0].length
+  const current: PieceSpec = { type: state.piece.type, cards: state.piece.cards }
+  if (state.hold) {
+    return {
+      ...state,
+      piece: makePiece(state.hold, width),
+      hold: current,
+      canHold: false,
     }
+  }
+  const drawn = drawSpec(state.bag, state.deck)
+  return {
+    ...state,
+    piece: makePiece(state.next, width),
+    next: drawn.spec,
+    bag: drawn.bag,
+    deck: drawn.deck,
+    hold: current,
+    canHold: false,
+  }
+}
+
+const HANDLED = [
+  'ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp',
+  'x', 'X', ' ', 'c', 'C', 'Enter',
+]
+
+function reduceKey(s: GameState, k: string): GameState {
+  if (!s.started) {
+    return (k === 'Enter' || k === ' ') && !s.gameOver ? newGame(true) : s
+  }
+  if (s.gameOver) return s
+  switch (k) {
+    case 'ArrowLeft': return move(s, -1, 0)
+    case 'ArrowRight': return move(s, 1, 0)
+    case 'ArrowDown': return softDrop(s)
+    case 'ArrowUp':
+    case 'x':
+    case 'X': return rotate(s)
+    case ' ': return hardDrop(s)
+    case 'c':
+    case 'C': return holdSwap(s)
+    default: return s
+  }
+}
+
+function Panel({
+  label,
+  hint,
+  className,
+  children,
+}: {
+  label: string
+  hint?: string
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <div className={`panel ${className ?? ''}`}>
+      <div className="panel-head">
+        <span className="panel-label">{label}</span>
+        {hint && <span className="panel-hint">{hint}</span>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function App() {
+  const [state, setState] = useState<GameState>(() => newGame())
+
+  // Gravità: velocità in base al livello, solo a gioco avviato.
+  useEffect(() => {
+    if (!state.started || state.gameOver) return
+    const id = setInterval(() => setState(step), tickMs(state.level))
+    return () => clearInterval(id)
+  }, [state.started, state.gameOver, state.level])
+
+  // Tastiera.
+  useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const handler = handlers[e.key]
-      if (!handler) return
+      if (!HANDLED.includes(e.key)) return
       e.preventDefault()
-      setState((s) => (s.gameOver ? s : handler(s)))
+      setState((s) => reduceKey(s, e.key))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const { board, piece, lines, score, best, gameOver } = state
-  const display = gameOver ? board : mergePiece(board, piece)
+  const start = () => setState(newGame(true))
+  // Applica un'azione solo durante il gioco (per i pulsanti touch).
+  const act = (fn: (s: GameState) => GameState) =>
+    setState((s) => (s.started && !s.gameOver ? fn(s) : s))
+
+  const { board, piece, next, hold, lines, score, scoreKey, level, best } = state
+  const showPiece = state.started && !state.gameOver
+  const display = showPiece ? mergePiece(board, piece) : board
   const columns = display[0].length
 
-  // Celle dove atterrerebbe il pezzo (ghost), solo dove la board è vuota.
-  const ghost = gameOver
-    ? new Set<string>()
-    : new Set(
+  const ghost = showPiece
+    ? new Set(
         pieceCells(dropPosition(board, piece))
           .filter(({ y }) => y >= 0)
           .map(({ x, y }) => `${y}-${x}`),
       )
+    : new Set<string>()
 
   const boardStyle = {
     gridTemplateColumns: `repeat(${columns}, 1fr)`,
@@ -135,67 +238,181 @@ function App() {
 
   return (
     <main className="app">
-      <header className="topbar">
-        <h1 className="title">
-          TETRIS <span className="title-poker">POKER</span>
-          <span className="suits">♠♥♦♣</span>
-        </h1>
-        <div className="stats">
-          <div className="stat">
-            <span className="score-label">PUNTI</span>
-            <span className="score-val">{score}</span>
+      <div className="shell">
+        {/* ---- LEFT ---- */}
+        <aside className="side left">
+          <div className="brand">
+            <div className="brand-tetris">TETRIS</div>
+            <div className="brand-poker">
+              POKER <span className="suits">♠♥♦♣</span>
+            </div>
           </div>
-          <div className="stat">
-            <span className="score-label">RIGHE</span>
-            <span className="score-val lines">{lines}</span>
-          </div>
-        </div>
-      </header>
 
-      <div className="board-frame">
-        <div className="felt">
-          <div className="board" style={boardStyle}>
-            {display.map((row, y) =>
-              row.map((cell, x) => {
-                if (cell) {
-                  const tone = isRedSuit(cell.suit) ? 'red' : 'black'
-                  return (
-                    <div key={`${y}-${x}`} className={`cell filled ${tone}`}>
-                      <span className="rank">{cell.rank}</span>
-                      <span className="corner-suit">{cell.suit}</span>
-                      <span className="center-suit">{cell.suit}</span>
+          <Panel label="HOLD" hint="[ C ]">
+            <MiniGrid spec={hold} />
+          </Panel>
+
+          <div className={`readout ${best ? 'on' : ''}`}>
+            <div className="panel-head">
+              <span className="panel-label">MIGLIOR MANO</span>
+              {best && <span className="readout-tag">RIGA</span>}
+            </div>
+            <div className="readout-name">
+              {best ? best.name : state.started ? 'In attesa…' : '—'}
+            </div>
+            <div className="readout-cards">
+              {best
+                ? best.cards.map((c, i) => (
+                    <div key={i} className="hand-card">
+                      <CardFace card={c} />
                     </div>
-                  )
-                }
-                const isGhost = ghost.has(`${y}-${x}`)
-                return (
-                  <div
-                    key={`${y}-${x}`}
-                    className={isGhost ? 'cell ghost' : 'cell'}
-                  />
-                )
-              }),
+                  ))
+                : Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="hand-card empty" />
+                  ))}
+            </div>
+            <div className="readout-points">
+              <span className="panel-label">PUNTI MANO</span>
+              <span className="readout-pts">
+                +{best ? HAND_POINTS[best.category] : 0}
+              </span>
+            </div>
+          </div>
+        </aside>
+
+        {/* ---- BOARD ---- */}
+        <div className="board-col">
+          <div className="board-frame">
+            <div className="felt">
+              <div className="board" style={boardStyle}>
+                {display.map((row, y) =>
+                  row.map((cell, x) => {
+                    const key = `${y}-${x}`
+                    if (cell) {
+                      return (
+                        <div key={key} className="cell">
+                          <CardFace card={cell.card} type={cell.type} />
+                        </div>
+                      )
+                    }
+                    if (ghost.has(key)) {
+                      return (
+                        <div key={key} className={`cell ghost t-${piece.type}`} />
+                      )
+                    }
+                    return <div key={key} className="cell empty" />
+                  }),
+                )}
+              </div>
+            </div>
+
+            {!state.started && !state.gameOver && (
+              <div className="overlay start">
+                <div className="overlay-suits">
+                  <span className="s-red">♥</span>
+                  <span>♠</span>
+                  <span className="s-red">♦</span>
+                  <span>♣</span>
+                </div>
+                <div className="overlay-title big">
+                  TETRIS
+                  <br />
+                  POKER
+                </div>
+                <div className="overlay-sub">
+                  Cala i tetromini. Componi la miglior mano su ogni riga. Vinci il
+                  banco.
+                </div>
+                <button className="btn" onClick={start}>
+                  PREMI PER INIZIARE
+                </button>
+                <div className="overlay-tip">
+                  o premi <b>Invio</b>
+                </div>
+              </div>
+            )}
+
+            {state.gameOver && (
+              <div className="overlay over">
+                <div className="overlay-kicker">PARTITA TERMINATA</div>
+                <div className="overlay-title">
+                  Game
+                  <br />
+                  Over
+                </div>
+                <div className="over-stats">
+                  <div className="over-stat">
+                    <span className="panel-label">PUNTEGGIO</span>
+                    <span className="over-val gold">{score}</span>
+                  </div>
+                  <div className="over-stat">
+                    <span className="panel-label">RIGHE</span>
+                    <span className="over-val">{lines}</span>
+                  </div>
+                </div>
+                <button className="btn" onClick={start}>
+                  ↻ RIGIOCA
+                </button>
+              </div>
             )}
           </div>
         </div>
 
-        {gameOver && (
-          <div className="overlay">
-            <div className="overlay-kicker">PARTITA TERMINATA</div>
-            <div className="overlay-title">
-              Game
-              <br />
-              Over
-            </div>
+        {/* ---- RIGHT ---- */}
+        <aside className="side right">
+          <Panel label="PUNTEGGIO">
+            <span key={scoreKey} className="big-score">
+              {score}
+            </span>
+          </Panel>
+
+          <div className="row2">
+            <Panel label="RIGHE">
+              <span className="stat-num">{lines}</span>
+            </Panel>
+            <Panel label="LIVELLO">
+              <span className="stat-num">{level}</span>
+            </Panel>
           </div>
-        )}
+
+          <Panel label="PROSSIMO">
+            <MiniGrid spec={next} />
+          </Panel>
+
+          <Panel label="COMANDI" className="legend">
+            <div className="keys">
+              <span className="key">← →</span>
+              <span>Muovi</span>
+              <span className="key">↑</span>
+              <span>Ruota</span>
+              <span className="key">↓</span>
+              <span>Discesa</span>
+              <span className="key">Spazio</span>
+              <span>Caduta</span>
+              <span className="key">C</span>
+              <span>Tieni</span>
+            </div>
+          </Panel>
+
+          <div className="pad">
+            <button className="pad-btn" onClick={() => act((s) => move(s, -1, 0))}>
+              ←
+            </button>
+            <button className="pad-btn" onClick={() => act(rotate)}>
+              ↑
+            </button>
+            <button className="pad-btn" onClick={() => act(softDrop)}>
+              ↓
+            </button>
+            <button className="pad-btn" onClick={() => act((s) => move(s, 1, 0))}>
+              →
+            </button>
+            <button className="pad-btn wide" onClick={() => act(hardDrop)}>
+              ⤓
+            </button>
+          </div>
+        </aside>
       </div>
-
-      <p className="hand-readout">
-        {best ? `${best.name} · +${HAND_POINTS[best.category]}` : '—'}
-      </p>
-
-      <p className="hint">← → muovi · ↓ giù · ↑ ruota · spazio cade</p>
     </main>
   )
 }

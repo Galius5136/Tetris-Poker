@@ -1,12 +1,19 @@
 // Modello della board — logica pura, nessun React qui.
 
 import type { Card } from './cards'
+import type { TetrominoType } from './tetromino'
 
 export const BOARD_WIDTH = 10
 export const BOARD_HEIGHT = 20
 
-// Una cella è vuota (`null`) oppure contiene una carta.
-export type Cell = Card | null
+// Una cella piena porta la carta e il tipo di tetromino (per il colore/glow).
+export interface FilledCell {
+  card: Card
+  type: TetrominoType
+}
+
+// Una cella è vuota (`null`) oppure piena.
+export type Cell = FilledCell | null
 
 export type Board = Cell[][]
 
@@ -20,15 +27,15 @@ export function createEmptyBoard(
   )
 }
 
-// Ritorna una NUOVA board con una carta posizionata in (x, y). Immutabile.
-export function placeCard(
+// Ritorna una NUOVA board con una cella piena posizionata in (x, y). Immutabile.
+export function placeCell(
   board: Board,
   x: number,
   y: number,
-  card: Card,
+  cell: FilledCell,
 ): Board {
   return board.map((row, ry) =>
-    ry === y ? row.map((cell, cx) => (cx === x ? card : cell)) : row,
+    ry === y ? row.map((c, cx) => (cx === x ? cell : c)) : row,
   )
 }
 
