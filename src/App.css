@@ -7,7 +7,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  padding: 1.6vh 2.4vw;
+  padding: 1.2vh 2vw;
   background: radial-gradient(
     120% 92% at 50% -12%,
     #154535 0%,
@@ -54,8 +54,8 @@
 .side {
   display: flex;
   flex-direction: column;
-  gap: 1.4vh;
-  width: clamp(168px, 16vw, 222px);
+  gap: 1vh;
+  width: clamp(150px, 15vw, 200px);
   flex: 0 0 auto;
 }
 
@@ -63,12 +63,12 @@
 .brand {
   display: flex;
   flex-direction: column;
-  padding: 0.4vh 0.2vh 0.6vh;
+  padding: 0 0.2vh 0.2vh;
 }
 .brand-tetris {
   font-family: 'Cormorant Garamond', serif;
   font-weight: 700;
-  font-size: clamp(26px, 3.5vh, 40px);
+  font-size: clamp(22px, 3vh, 34px);
   line-height: 0.92;
   background: linear-gradient(100deg, #bd9a45, #f4e2a6, #bd9a45);
   background-size: 200% 100%;
@@ -80,7 +80,7 @@
 .brand-poker {
   font-family: 'Cormorant Garamond', serif;
   font-weight: 600;
-  font-size: clamp(22px, 2.9vh, 34px);
+  font-size: clamp(18px, 2.4vh, 28px);
   line-height: 0.95;
   color: #c5cabe;
 }
@@ -95,9 +95,9 @@
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 0.8vh;
-  padding: 1.2vh 1.3vh 1.4vh;
-  border-radius: 1.4vh;
+  gap: 0.5vh;
+  padding: 0.7vh 1vh 0.9vh;
+  border-radius: 1.2vh;
   background: linear-gradient(165deg, rgba(22, 52, 41, 0.92), rgba(12, 33, 25, 0.92));
   box-shadow:
     inset 0 0 0 1px rgba(212, 175, 55, 0.16),
@@ -124,7 +124,7 @@
 
 .row2 {
   display: flex;
-  gap: 1.4vh;
+  gap: 1vh;
 }
 .row2 .panel {
   flex: 1;
@@ -132,7 +132,7 @@
 .stat-num {
   font-family: 'Cormorant Garamond', serif;
   font-weight: 700;
-  font-size: clamp(22px, 3.2vh, 30px);
+  font-size: clamp(18px, 2.6vh, 26px);
   font-variant-numeric: tabular-nums;
   color: #efe9d8;
 }
@@ -159,7 +159,7 @@
   display: inline-block;
   font-family: 'Cormorant Garamond', serif;
   font-weight: 700;
-  font-size: clamp(34px, 5.4vh, 56px);
+  font-size: clamp(26px, 4.2vh, 42px);
   line-height: 0.95;
   font-variant-numeric: tabular-nums;
   color: #e3c46a;
@@ -173,7 +173,8 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 4%;
   aspect-ratio: 1 / 1;
-  width: 100%;
+  width: min(100%, 116px);
+  margin: 0 auto;
 }
 .mini-cell {
   container-type: size;
@@ -279,9 +280,9 @@
 }
 .board {
   --rows: 20;
-  /* la cella si adatta all'altezza finestra, lasciando spazio a cornice,
-     padding e impaginazione; cap a 34px per non sforare in larghezza. */
-  --cell: min(34px, calc((100vh - 104px) / var(--rows)));
+  /* la cella si adatta all'altezza finestra. Il divisore 22 tiene conto dei
+     gap tra le righe; il -64 riserva cornice/padding/impaginazione. */
+  --cell: min(32px, calc((100vh - 64px) / 22));
   display: grid;
   gap: calc(var(--cell) * 0.08);
 }
@@ -513,15 +514,15 @@
 .over-val.gold { color: #e3c46a; }
 
 .btn {
-  margin-top: 0.4vh;
-  padding: 1.4vh 2.8vh;
+  margin-top: 0.2vh;
+  padding: 1.1vh 2.4vh;
   border: none;
   border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
   font-family: 'Hanken Grotesk', sans-serif;
   font-weight: 700;
-  font-size: clamp(13px, 1.8vh, 16px);
+  font-size: clamp(12px, 1.6vh, 15px);
   letter-spacing: 0.12em;
   color: #2a1f06;
   background: linear-gradient(160deg, #f4e2a6, #bd9a45);
@@ -537,9 +538,9 @@
 .keys {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 0.7vh 1ch;
+  gap: 0.4vh 1ch;
   align-items: center;
-  font-size: 12px;
+  font-size: 11px;
   color: #c5cabe;
 }
 .key {
@@ -557,16 +558,16 @@
 }
 .pad {
   display: flex;
-  gap: 0.8vh;
+  gap: 0.7vh;
   justify-content: center;
 }
 .pad-btn {
-  width: clamp(38px, 6.4vh, 52px);
-  height: clamp(38px, 6.4vh, 52px);
+  width: clamp(32px, 5vh, 44px);
+  height: clamp(32px, 5vh, 44px);
   border: none;
   border-radius: 12px;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: #c5cabe;
   background: linear-gradient(165deg, rgba(22, 52, 41, 0.92), rgba(12, 33, 25, 0.92));
@@ -574,7 +575,7 @@
   transition: transform 0.1s ease;
 }
 .pad-btn.wide {
-  width: clamp(46px, 7.6vh, 62px);
+  width: clamp(40px, 6vh, 54px);
   color: #e3c46a;
 }
 .pad-btn:active { transform: translateY(1px); }
