@@ -82,7 +82,6 @@ interface GameState {
   config: RunConfig // effetti dei joker equipaggiati, fissati all'avvio del run
   deckTemplate: Deck // mazzo-modello del run (composizione Cat.4)
   specials: SpecialRule[] // regole di spawn dei pezzi speciali (Cat.2)
-  piecesLocked: number // pezzi bloccati nel run (difficoltà incrementale)
   burst: SpecialKind | null // effetto visivo transitorio (laser/bomb/cleaver)
   heavyClear: boolean // l'ultima pulizia è stata innescata da un pezzo Heavy
   streakPending: boolean // STREAK_BONUS: +15% in attesa per la prossima mano
@@ -138,7 +137,6 @@ function newGame(
     config,
     deckTemplate,
     specials,
-    piecesLocked: 0,
     burst: null,
     heavyClear: false,
     streakPending: false,
@@ -237,7 +235,6 @@ function isBetter(a: HandResult, b: HandResult | null): boolean {
 }
 
 // Genera il prossimo pezzo da next/bag/deck su una board data.
-// Ogni spawn corrisponde a un pezzo appena bloccato → +1 alla difficoltà.
 function spawnNext(state: GameState, board: Board): GameState {
   const piece = makePiece(state.next, board[0].length)
   const drawn = drawSpec(state.bag, state.deck, state.deckTemplate, state.specials)
@@ -250,7 +247,6 @@ function spawnNext(state: GameState, board: Board): GameState {
     deck: drawn.deck,
     canHold: true,
     grounded: false,
-    piecesLocked: state.piecesLocked + 1,
     gameOver: collides(board, piece),
   }
 }
@@ -546,15 +542,15 @@ function App() {
     }
   }, [state.gameOver, state.bankroll, state.progress])
 
-  // Gravità: velocità da livello × difficoltà incrementale; Heavy cade ×2.
+  // Gravità: la difficoltà accelera a ogni livello salito; Heavy cade ×2.
   const heavyFalling = state.piece.special === 'heavy'
   useEffect(() => {
     if (!state.started || state.gameOver) return
-    const base = difficultyTick(tickMs(state.level), state.piecesLocked)
+    const base = difficultyTick(tickMs(state.level), state.level - START_LEVEL)
     const ms = heavyFalling ? Math.max(MIN_TICK_MS, Math.round(base / 2)) : base
     const id = setInterval(() => setState(step), ms)
     return () => clearInterval(id)
-  }, [state.started, state.gameOver, state.level, state.piecesLocked, heavyFalling])
+  }, [state.started, state.gameOver, state.level, heavyFalling])
 
   // Fine lampeggio righe → pulizia + punteggio + spawn.
   useEffect(() => {
@@ -706,7 +702,7 @@ function App() {
   const slotCards = reels.map((i) => REEL_CARDS[i])
   const slotOutcome = game === 'slot' && stopped >= 3 ? evalThreeCardHand(slotCards) : null
   const rouletteIdx = rouletteIndexAt(wheelAngle)
-  const speedMult = speedMultiplier(state.piecesLocked)
+  const speedMult = speedMultiplier(state.level - START_LEVEL)
   const continueLabel = levelEnd ? `CONTINUA · TAVOLO ${table}` : 'CHIUDI (P)'
   const showPiece = state.started && !state.gameOver && !state.flashRows
   const display = showPiece ? mergePiece(board, piece) : board

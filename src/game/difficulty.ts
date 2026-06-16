@@ -1,35 +1,34 @@
 // Difficoltà incrementale — logica pura.
-// Ogni pezzo bloccato accelera la caduta di `factorPerLock`. Bounded da `cap`
-// (moltiplicatore massimo) e da un floor sul tick (MIN_TICK_MS), così il gioco
-// resta tecnicamente giocabile anche con fattori aggressivi.
+// La velocità di caduta aumenta a ogni passaggio di livello (non per pezzo):
+// moltiplicatore = factorPerLevel ^ (livelli saliti), limitato da `cap` e da un
+// floor sul tick (MIN_TICK_MS).
 
 export interface DifficultyConfig {
-  factorPerLock: number // moltiplicatore di velocità per ogni pezzo incastrato
+  factorPerLevel: number // moltiplicatore di velocità per ogni livello salito
   cap: number // moltiplicatore massimo raggiungibile
 }
 
-// Valore richiesto dal lead (×1.5 a pezzo) con un cap di sicurezza.
 export const DEFAULT_DIFFICULTY: DifficultyConfig = {
-  factorPerLock: 1.5,
+  factorPerLevel: 1.2,
   cap: 8,
 }
 
 export const MIN_TICK_MS = 60 // tick minimo: sotto è di fatto ingiocabile
 
-// Moltiplicatore di velocità dopo `piecesLocked` pezzi.
+// Moltiplicatore di velocità dopo `levelsGained` salite di livello.
 export function speedMultiplier(
-  piecesLocked: number,
+  levelsGained: number,
   cfg: DifficultyConfig = DEFAULT_DIFFICULTY,
 ): number {
-  const raw = cfg.factorPerLock ** Math.max(0, piecesLocked)
+  const raw = cfg.factorPerLevel ** Math.max(0, levelsGained)
   return Math.min(cfg.cap, raw)
 }
 
-// Tick di gravità effettivo, dato il tick base (da livello) e i pezzi bloccati.
+// Tick di gravità effettivo: tick base (da livello) diviso il moltiplicatore.
 export function difficultyTick(
   baseMs: number,
-  piecesLocked: number,
+  levelsGained: number,
   cfg: DifficultyConfig = DEFAULT_DIFFICULTY,
 ): number {
-  return Math.max(MIN_TICK_MS, Math.round(baseMs / speedMultiplier(piecesLocked, cfg)))
+  return Math.max(MIN_TICK_MS, Math.round(baseMs / speedMultiplier(levelsGained, cfg)))
 }
