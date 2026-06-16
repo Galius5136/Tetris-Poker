@@ -2,11 +2,12 @@
    Solo presentazione; la logica di gioco resta in src/game. */
 
 .app {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2.2vh 2.4vw;
+  overflow: hidden;
+  padding: 1.6vh 2.4vw;
   background: radial-gradient(
     120% 92% at 50% -12%,
     #154535 0%,
@@ -254,7 +255,9 @@
 }
 .board {
   --rows: 20;
-  --cell: min(40px, calc((100vh - 56px) / var(--rows)));
+  /* la cella si adatta all'altezza finestra, lasciando spazio a cornice,
+     padding e impaginazione; cap a 34px per non sforare in larghezza. */
+  --cell: min(34px, calc((100vh - 104px) / var(--rows)));
   display: grid;
   gap: calc(var(--cell) * 0.08);
 }
