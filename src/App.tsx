@@ -10,8 +10,8 @@ import { createEmptyBoard, clearFullRows } from './game/board'
 import type { Board, FilledCell } from './game/board'
 import { mergePiece, pieceCells } from './game/tetromino'
 import type { Piece, TetrominoType } from './game/tetromino'
-import { collides, tryMove, tryRotate, dropPosition } from './game/engine'
-import { drawSpec, makePiece, type PieceSpec } from './game/spawn'
+import { collides, tryMove, tryRotate, tryMirror, dropPosition } from './game/engine'
+import { drawSpec, makePiece, type PieceSpec, type SpecialRule } from './game/spawn'
 import { shuffle, fullDeck, buildDeckTemplate, type Deck } from './game/deck'
 import { evalRow, HAND_POINTS, type HandResult } from './game/poker'
 import { SUITS, type Suit } from './game/cards'
@@ -36,6 +36,7 @@ import { ShopScreen } from './meta/ShopScreen'
 import type { Upgrade, UpgradeId } from './meta/upgrades'
 import {
   buildRunConfig,
+  buildSpecials,
   handPointsWithConfig,
   startingBankroll,
   STREAK_BONUS_MULT,
@@ -72,6 +73,8 @@ interface GameState {
   mods: Modifiers // potenziamenti accumulati dai perk (cumulativi)
   config: RunConfig // effetti dei joker equipaggiati, fissati all'avvio del run
   deckTemplate: Deck // mazzo-modello del run (composizione Cat.4)
+  specials: SpecialRule[] // regole di spawn dei pezzi speciali (Cat.2)
+  heavyClear: boolean // l'ultima pulizia è stata innescata da un pezzo Heavy
   streakPending: boolean // STREAK_BONUS: +15% in attesa per la prossima mano
   wildSuit: Suit | null // FLUSH_WILD_SUIT: seme jolly scelto a inizio run
   doubleDownAvail: boolean // DOUBLE_DOWN: ancora disponibile (una volta per run)
@@ -89,11 +92,12 @@ function newGame(
   startBankroll = 0,
   wildSuit: Suit | null = null,
   deckTemplate: Deck = fullDeck(),
+  specials: SpecialRule[] = [],
 ): GameState {
   const board = createEmptyBoard()
   const width = board[0].length
-  const first = drawSpec([], shuffle(deckTemplate), deckTemplate)
-  const second = drawSpec(first.bag, first.deck, deckTemplate)
+  const first = drawSpec([], shuffle(deckTemplate), deckTemplate, specials)
+  const second = drawSpec(first.bag, first.deck, deckTemplate, specials)
   return {
     board,
     piece: makePiece(first.spec, width),
@@ -123,6 +127,8 @@ function newGame(
     mods: BASE_MODIFIERS,
     config,
     deckTemplate,
+    specials,
+    heavyClear: false,
     streakPending: false,
     wildSuit,
     doubleDownAvail: config.doubleDown,
@@ -221,7 +227,7 @@ function isBetter(a: HandResult, b: HandResult | null): boolean {
 // Genera il prossimo pezzo da next/bag/deck su una board data.
 function spawnNext(state: GameState, board: Board): GameState {
   const piece = makePiece(state.next, board[0].length)
-  const drawn = drawSpec(state.bag, state.deck, state.deckTemplate)
+  const drawn = drawSpec(state.bag, state.deck, state.deckTemplate, state.specials)
   return {
     ...state,
     board,
@@ -246,7 +252,14 @@ function lockPiece(state: GameState, piece: Piece): GameState {
   if (fullRows.length === 0) {
     return spawnNext(state, merged)
   }
-  return { ...state, board: merged, flashRows: fullRows, canHold: true, grounded: false }
+  return {
+    ...state,
+    board: merged,
+    flashRows: fullRows,
+    canHold: true,
+    grounded: false,
+    heavyClear: piece.special === 'heavy', // HEAVY_PIECE: payout ×1.5
+  }
 }
 
 // Fine del lampeggio: valuta le mani, assegna i punti, elimina le righe, spawn.
@@ -271,6 +284,7 @@ function resolveClear(state: GameState): GameState {
   }
   if (rows.length > 1) gained *= rows.length // bonus multi-riga
   gained = Math.round(gained * cfg.handPayoutMult) // HIGH_ROLLER
+  if (state.heavyClear) gained = Math.round(gained * 1.5) // HEAVY_PIECE
   if (state.streakPending) gained = Math.round(gained * STREAK_BONUS_MULT) // STREAK_BONUS
 
   // DOUBLE_DOWN: se armato, raddoppia se la mano non è peggiore della precedente;
@@ -299,6 +313,7 @@ function resolveClear(state: GameState): GameState {
   const base = {
     ...state,
     flashRows: null,
+    heavyClear: false,
     streakPending,
     doubleDownArmed,
     doubleDownAvail,
@@ -358,6 +373,13 @@ function rotate(state: GameState): GameState {
   return rotated ? afterAction({ ...state, piece: rotated }) : state
 }
 
+// MIRROR_PIECE: specchia il pezzo (una volta), solo se il joker è attivo.
+function mirror(state: GameState): GameState {
+  if (!state.config.mirror) return state
+  const m = tryMirror(state.board, state.piece)
+  return m ? afterAction({ ...state, piece: m }) : state
+}
+
 function hardDrop(state: GameState): GameState {
   return lockPiece(state, dropPosition(state.board, state.piece))
 }
@@ -365,7 +387,11 @@ function hardDrop(state: GameState): GameState {
 function holdSwap(state: GameState): GameState {
   if (!state.canHold) return state
   const width = state.board[0].length
-  const current: PieceSpec = { type: state.piece.type, cards: state.piece.cards }
+  const current: PieceSpec = {
+    type: state.piece.type,
+    cards: state.piece.cards,
+    special: state.piece.special ?? null,
+  }
   if (state.hold) {
     const piece = makePiece(state.hold, width)
     return {
@@ -377,7 +403,7 @@ function holdSwap(state: GameState): GameState {
       gameOver: collides(state.board, piece),
     }
   }
-  const drawn = drawSpec(state.bag, state.deck, state.deckTemplate)
+  const drawn = drawSpec(state.bag, state.deck, state.deckTemplate, state.specials)
   const piece = makePiece(state.next, width)
   return {
     ...state,
@@ -394,7 +420,7 @@ function holdSwap(state: GameState): GameState {
 
 const HANDLED = [
   'ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp',
-  'x', 'X', ' ', 'c', 'C', 'Enter', 'p', 'P', 'Escape', 'd', 'D',
+  'x', 'X', ' ', 'c', 'C', 'Enter', 'p', 'P', 'Escape', 'd', 'D', 'm', 'M',
 ]
 
 // Movimento con auto-repeat gestito dal gioco (DAS/ARR), non dal SO.
@@ -426,6 +452,8 @@ function reduceKey(s: GameState, k: string): GameState {
     case ' ': return hardDrop(s)
     case 'c':
     case 'C': return holdSwap(s)
+    case 'm':
+    case 'M': return mirror(s)
     case 'd':
     case 'D':
       // DOUBLE_DOWN: arma il raddoppio per la prossima mano (una volta per run).
@@ -483,12 +511,14 @@ function App() {
     }
   }, [state.gameOver, state.bankroll, state.progress])
 
-  // Gravità: velocità in base al livello, solo a gioco avviato.
+  // Gravità: velocità in base al livello; i pezzi Heavy cadono ×2 più veloci.
+  const heavyFalling = state.piece.special === 'heavy'
   useEffect(() => {
     if (!state.started || state.gameOver) return
-    const id = setInterval(() => setState(step), tickMs(state.level))
+    const ms = heavyFalling ? Math.round(tickMs(state.level) / 2) : tickMs(state.level)
+    const id = setInterval(() => setState(step), ms)
     return () => clearInterval(id)
-  }, [state.started, state.gameOver, state.level])
+  }, [state.started, state.gameOver, state.level, heavyFalling])
 
   // Fine lampeggio righe → pulizia + punteggio + spawn.
   useEffect(() => {
@@ -599,7 +629,10 @@ function App() {
       doubleFace: config.doubleFace,
       heartFocus: config.heartFocus,
     })
-    setState(newGame(true, config, startBankroll, wildSuit, deckTemplate))
+    const specials = buildSpecials(meta.activeJokers) // Cat.2: regole pezzi speciali
+    setState(
+      newGame(true, config, startBankroll, wildSuit, deckTemplate, specials),
+    )
   }
   // Ref aggiornati a ogni render, per l'handler tastiera (deps []).
   startRef.current = startRun
@@ -642,6 +675,16 @@ function App() {
           .map(({ x, y }) => `${y}-${x}`),
       )
     : new Set<string>()
+
+  // Celle del pezzo speciale in caduta (per il loro look distinto).
+  const specialCells =
+    showPiece && piece.special
+      ? new Set(
+          pieceCells(piece)
+            .filter(({ y }) => y >= 0)
+            .map(({ x, y }) => `${y}-${x}`),
+        )
+      : new Set<string>()
 
   const boardStyle = {
     gridTemplateColumns: `repeat(${columns}, 1fr)`,
@@ -702,8 +745,12 @@ function App() {
                     const key = `${y}-${x}`
                     if (cell) {
                       const flash = flashSet.has(y) ? ' flash' : ''
+                      const sp =
+                        specialCells.has(key) && piece.special
+                          ? ` special special-${piece.special}`
+                          : ''
                       return (
-                        <div key={key} className={`cell${flash}`}>
+                        <div key={key} className={`cell${flash}${sp}`}>
                           <CardFace card={cell.card} type={cell.type} />
                         </div>
                       )
@@ -979,6 +1026,18 @@ function App() {
               <span>Tieni</span>
               <span className="key">P</span>
               <span>Casinò</span>
+              {state.config.mirror && (
+                <>
+                  <span className="key">M</span>
+                  <span>Specchia</span>
+                </>
+              )}
+              {state.config.doubleDown && (
+                <>
+                  <span className="key">D</span>
+                  <span>Double Down</span>
+                </>
+              )}
             </div>
           </Panel>
 

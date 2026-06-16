@@ -15,6 +15,8 @@ const IMPLEMENTED: ReadonlySet<UpgradeId> = new Set<UpgradeId>([
   'FIVE_OF_A_KIND', 'FLUSH_WILD_SUIT', 'STRAIGHT_GAP', 'POKER_KICKER', 'DOUBLE_DOWN',
   // Cat.4 (composizione mazzo, escluso ADD_JOKER_CARDS)
   'REMOVE_LOW_CARDS', 'DOUBLE_FACE_CARDS', 'SUIT_FOCUS_HEARTS',
+  // Cat.2 (pezzi speciali, in arrivo uno alla volta)
+  'MIRROR_PIECE', 'HEAVY_PIECE',
 ])
 
 // PRNG deterministico (mulberry32): stesso seed → stessa sequenza.

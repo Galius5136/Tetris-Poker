@@ -4,7 +4,9 @@
 // aggiungono campi qui nei passi successivi.
 
 import type { HandCategory } from '../game/poker'
-import type { JokerId } from './upgrades'
+import type { SpecialKind } from '../game/tetromino'
+import type { SpecialRule } from '../game/spawn'
+import { UPGRADES, type JokerId, type UpgradeId } from './upgrades'
 
 export interface RunConfig {
   // Cat.1 — moltiplicatori bankroll
@@ -23,6 +25,8 @@ export interface RunConfig {
   removeLow: boolean // REMOVE_LOW_CARDS
   doubleFace: boolean // DOUBLE_FACE_CARDS
   heartFocus: boolean // SUIT_FOCUS_HEARTS
+  // Cat.2 — pezzi speciali (abilità)
+  mirror: boolean // MIRROR_PIECE: tasto M
 }
 
 export const NEUTRAL_CONFIG: RunConfig = {
@@ -39,6 +43,7 @@ export const NEUTRAL_CONFIG: RunConfig = {
   removeLow: false,
   doubleFace: false,
   heartFocus: false,
+  mirror: false,
 }
 
 export const STREAK_BONUS_MULT = 1.15
@@ -59,7 +64,34 @@ export function buildRunConfig(jokers: JokerId[]): RunConfig {
     removeLow: has('REMOVE_LOW_CARDS'),
     doubleFace: has('DOUBLE_FACE_CARDS'),
     heartFocus: has('SUIT_FOCUS_HEARTS'),
+    mirror: has('MIRROR_PIECE'),
   }
+}
+
+// Upgrade-pezzo → tipo speciale spawnato.
+const PIECE_JOKER_KIND: Partial<Record<UpgradeId, SpecialKind>> = {
+  HEAVY_PIECE: 'heavy',
+  GHOST_PIECE: 'ghost',
+  BOMB_PIECE: 'bomb',
+  LASER_PIECE: 'laser',
+  COLUMN_CLEAVER: 'cleaver',
+  ANCHOR_PIECE: 'anchor',
+  WILDCARD_PIECE: 'wild',
+}
+
+// Solo i tipi speciali già implementati vengono effettivamente spawnati.
+const IMPLEMENTED_KINDS: ReadonlySet<SpecialKind> = new Set<SpecialKind>(['heavy'])
+
+// Regole di spawn dei pezzi speciali dai joker equipaggiati.
+export function buildSpecials(jokers: JokerId[]): SpecialRule[] {
+  const rules: SpecialRule[] = []
+  for (const id of jokers) {
+    const kind = PIECE_JOKER_KIND[id]
+    if (kind && IMPLEMENTED_KINDS.has(kind)) {
+      rules.push({ kind, rarity: UPGRADES[id].rarity ?? 10 })
+    }
+  }
+  return rules
 }
 
 // Punti di una singola mano applicando i moltiplicatori per-categoria.

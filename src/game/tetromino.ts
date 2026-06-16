@@ -19,14 +19,27 @@ export const SHAPES: Record<TetrominoType, ReadonlyArray<Coord>> = {
   L: [[2, 0], [0, 1], [1, 1], [2, 1]],
 }
 
+// Tipi di pezzo speciale (Cat.2 del meta-shop).
+export type SpecialKind =
+  | 'heavy'
+  | 'ghost'
+  | 'bomb'
+  | 'laser'
+  | 'cleaver'
+  | 'anchor'
+  | 'wild'
+
 // Un pezzo in gioco: forma, posizione dell'origine, rotazione (0..3 in senso
 // orario) e le 4 carte (una per cella, stesso ordine delle coordinate base).
+// `special`/`mirrored` sono opzionali (pezzo normale = entrambi assenti).
 export interface Piece {
   type: TetrominoType
   x: number
   y: number
   rotation: number
   cards: [Card, Card, Card, Card]
+  special?: SpecialKind | null
+  mirrored?: boolean
 }
 
 // Ruota un set di coordinate di 90° in senso orario, mantenendo l'ordine
@@ -48,10 +61,16 @@ function shapeCells(
 }
 
 // Celle assolute del pezzo sulla board, ognuna con la sua carta.
+// Se `mirrored`, riflette orizzontalmente la forma (MIRROR_PIECE).
 export function pieceCells(
   piece: Piece,
 ): Array<{ x: number; y: number; card: Card }> {
-  return shapeCells(piece.type, piece.rotation).map(([dx, dy], i) => ({
+  let cells = shapeCells(piece.type, piece.rotation)
+  if (piece.mirrored) {
+    const maxX = Math.max(...cells.map(([x]) => x))
+    cells = cells.map(([x, y]) => [maxX - x, y] as const)
+  }
+  return cells.map(([dx, dy], i) => ({
     x: piece.x + dx,
     y: piece.y + dy,
     card: piece.cards[i],

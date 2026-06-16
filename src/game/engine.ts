@@ -37,6 +37,13 @@ export function tryRotate(board: Board, piece: Piece): Piece | null {
   return null
 }
 
+// Specchia orizzontalmente il pezzo (MIRROR_PIECE), una sola volta.
+export function tryMirror(board: Board, piece: Piece): Piece | null {
+  if (piece.mirrored) return null
+  const mirrored: Piece = { ...piece, mirrored: true }
+  return collides(board, mirrored) ? null : mirrored
+}
+
 // Posizione del pezzo dopo una caduta fino in fondo (per la ghost piece).
 export function dropPosition(board: Board, piece: Piece): Piece {
   let p = piece

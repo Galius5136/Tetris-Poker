@@ -1,17 +1,37 @@
 // Generazione dei pezzi — la randomizzazione (7-bag + pesca carte) è IMPURA
 // (Math.random via shuffle) e tenuta isolata qui.
 
-import { SHAPES, type Piece, type TetrominoType } from './tetromino'
+import {
+  SHAPES,
+  type Piece,
+  type TetrominoType,
+  type SpecialKind,
+} from './tetromino'
 import type { Card } from './cards'
 import { shuffle, fullDeck, type Deck } from './deck'
 
 const ALL_TYPES = Object.keys(SHAPES) as TetrominoType[]
 const CELLS_PER_PIECE = 4
 
-// "Spec" di un pezzo prima di entrare in gioco: forma + 4 carte.
+// "Spec" di un pezzo prima di entrare in gioco: forma + 4 carte + eventuale tipo speciale.
 export interface PieceSpec {
   type: TetrominoType
   cards: [Card, Card, Card, Card]
+  special: SpecialKind | null
+}
+
+// Regola di spawn di un pezzo speciale: 1 probabilità su `rarity`.
+export interface SpecialRule {
+  kind: SpecialKind
+  rarity: number
+}
+
+// Decide se il prossimo pezzo è speciale (IMPURO). La prima regola che "scatta" vince.
+export function rollSpecial(rules: SpecialRule[]): SpecialKind | null {
+  for (const r of rules) {
+    if (Math.random() < 1 / r.rarity) return r.kind
+  }
+  return null
 }
 
 // 7-bag: estrae un tipo dal sacchetto; se vuoto, lo riempie mescolando i 7.
@@ -41,15 +61,20 @@ export function drawCards(
   }
 }
 
-// Pesca una spec completa (tipo dal bag, carte dal mazzo-modello del run).
+// Pesca una spec completa (tipo dal bag, carte dal mazzo, eventuale speciale).
 export function drawSpec(
   bag: TetrominoType[],
   deck: Deck,
   template: Deck = fullDeck(),
+  specialRules: SpecialRule[] = [],
 ): { spec: PieceSpec; bag: TetrominoType[]; deck: Deck } {
   const t = drawType(bag)
   const c = drawCards(deck, template)
-  return { spec: { type: t.type, cards: c.cards }, bag: t.bag, deck: c.deck }
+  return {
+    spec: { type: t.type, cards: c.cards, special: rollSpecial(specialRules) },
+    bag: t.bag,
+    deck: c.deck,
+  }
 }
 
 // Crea il pezzo giocabile da una spec, centrato in cima.
@@ -60,5 +85,7 @@ export function makePiece(spec: PieceSpec, boardWidth: number): Piece {
     y: 0,
     rotation: 0,
     cards: spec.cards,
+    special: spec.special,
+    mirrored: false,
   }
 }
