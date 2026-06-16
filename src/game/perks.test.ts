@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { BASE_MODIFIERS, applyModifiers, evalSlot } from './perks'
+import { BASE_MODIFIERS, applyModifiers, evalThreeCardHand } from './perks'
+import type { Card, Rank, Suit } from './cards'
+
+const c = (rank: Rank, suit: Suit): Card => ({ rank, suit })
 
 describe('applyModifiers', () => {
   it('senza perk lascia invariato', () => {
@@ -10,23 +13,30 @@ describe('applyModifiers', () => {
   })
 })
 
-describe('evalSlot (allineamenti)', () => {
-  it('tre 7 → moltiplicatore ×2', () => {
-    const o = evalSlot(['7', '7', '7'])
-    expect(o.label).toBe('777')
-    expect(o.apply(BASE_MODIFIERS).mods.mult).toBe(2)
+describe('evalThreeCardHand (mano di poker a 3 carte)', () => {
+  it('tris → moltiplicatore ×2', () => {
+    const o = evalThreeCardHand([c('A', '♠'), c('A', '♥'), c('A', '♦')])
+    expect(o.label).toBe('Tris')
+    expect(o.apply(BASE_MODIFIERS).mult).toBe(2)
   })
-  it('due diamanti → +60 fiches', () => {
-    const o = evalSlot(['💎', '💎', '7'])
-    expect(o.apply(BASE_MODIFIERS).fiches).toBe(60)
+  it('colore (3 stessi semi) → ×1.6', () => {
+    const o = evalThreeCardHand([c('A', '♠'), c('10', '♠'), c('6', '♠')])
+    expect(o.label).toBe('Colore')
+    expect(o.apply(BASE_MODIFIERS).mult).toBe(1.6)
   })
-  it('tre batte due (priorità al tris)', () => {
-    // tre stelle: deve dare il premio "three", non "two"
-    const o = evalSlot(['⭐', '⭐', '⭐'])
-    expect(o.apply(BASE_MODIFIERS).mods.bonusPerClear).toBe(30)
+  it('scala (3 consecutive, semi misti) → +25/riga', () => {
+    const o = evalThreeCardHand([c('J', '♦'), c('10', '♠'), c('9', '♥')])
+    expect(o.label).toBe('Scala')
+    expect(o.apply(BASE_MODIFIERS).bonusPerClear).toBe(25)
   })
-  it('nessuna coppia → consolazione +20', () => {
-    const o = evalSlot(['7', '💎', '⭐'])
-    expect(o.apply(BASE_MODIFIERS).fiches).toBe(20)
+  it('coppia → ×1.25', () => {
+    const o = evalThreeCardHand([c('A', '♠'), c('A', '♥'), c('K', '♣')])
+    expect(o.label).toBe('Coppia')
+    expect(o.apply(BASE_MODIFIERS).mult).toBe(1.25)
+  })
+  it('carta alta → consolazione', () => {
+    const o = evalThreeCardHand([c('A', '♠'), c('Q', '♥'), c('9', '♣')])
+    expect(o.label).toBe('Carta Alta')
+    expect(o.apply(BASE_MODIFIERS).bonusPerClear).toBe(8)
   })
 })
