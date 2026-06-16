@@ -136,6 +136,25 @@
   font-variant-numeric: tabular-nums;
   color: #efe9d8;
 }
+.progress {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.16);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #bd9a45, #f4e2a6);
+  transition: width 0.25s ease;
+}
+.progress-text {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #8fa093;
+}
+
 .big-score {
   display: inline-block;
   font-family: 'Cormorant Garamond', serif;
@@ -356,6 +375,8 @@
 }
 .overlay.start { background: rgba(7, 20, 15, 0.72); }
 .overlay.over { background: rgba(5, 14, 10, 0.86); }
+.overlay.payout { background: rgba(7, 20, 15, 0.82); }
+.overlay.payout .overlay-kicker { color: #e3c46a; letter-spacing: 0.2em; }
 .overlay-suits {
   display: flex;
   gap: 1.4vh;

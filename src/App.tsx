@@ -9,6 +9,7 @@ import { drawSpec, makePiece, type PieceSpec } from './game/spawn'
 import { shuffledDeck, type Deck } from './game/deck'
 import { evalRow, HAND_POINTS, type HandResult } from './game/poker'
 import { levelFromLines, tickMs, START_LEVEL } from './game/levels'
+import { tableTarget } from './game/run'
 import { CardFace } from './ui/CardFace'
 import { MiniGrid } from './ui/MiniGrid'
 
@@ -28,6 +29,9 @@ interface GameState {
   flashRows: number[] | null // righe piene in fase di lampeggio
   grounded: boolean // il pezzo è appoggiato (lock delay in corso)
   lockKey: number // bumpato a ogni mossa per resettare il timer di lock
+  table: number // tavolo corrente del run
+  target: number // fiches necessarie per superare il tavolo
+  payout: boolean // momento "Banco": tavolo superato, in attesa di avanzare
   started: boolean
   gameOver: boolean
 }
@@ -53,9 +57,18 @@ function newGame(started = false): GameState {
     flashRows: null,
     grounded: false,
     lockKey: 0,
+    table: 1,
+    target: tableTarget(1),
+    payout: false,
     started,
     gameOver: false,
   }
+}
+
+// Avanza al tavolo successivo dopo il pagamento del Banco.
+function advanceTable(state: GameState): GameState {
+  const table = state.table + 1
+  return { ...state, table, target: tableTarget(table), payout: false }
 }
 
 const LOCK_DELAY_MS = 500
@@ -120,24 +133,27 @@ function resolveClear(state: GameState): GameState {
 
   const { board, cleared } = clearFullRows(state.board)
   const lines = state.lines + cleared
-  return spawnNext(
+  const score = state.score + gained
+  const next = spawnNext(
     {
       ...state,
       flashRows: null,
       lines,
       level: levelFromLines(lines),
-      score: state.score + gained,
+      score,
       scoreKey: gained > 0 ? state.scoreKey + 1 : state.scoreKey,
       best: clearBest,
     },
     board,
   )
+  // Tavolo superato → il Banco paga (a meno che la board non sia già piena).
+  return score >= state.target && !next.gameOver ? { ...next, payout: true } : next
 }
 
 // Tick di gravità: scende di una riga; se non può, segna "appoggiato"
 // (il blocco vero avviene dopo il lock delay, vedi effetto in App).
 function step(state: GameState): GameState {
-  if (!state.started || state.gameOver || state.flashRows) return state
+  if (!state.started || state.gameOver || state.flashRows || state.payout) return state
   const moved = tryMove(state.board, state.piece, 0, 1)
   if (moved) return { ...state, piece: moved, grounded: false }
   return state.grounded ? state : { ...state, grounded: true }
@@ -207,6 +223,9 @@ function reduceKey(s: GameState, k: string): GameState {
   if (!s.started) {
     return (k === 'Enter' || k === ' ') && !s.gameOver ? newGame(true) : s
   }
+  if (s.payout) {
+    return k === 'Enter' || k === ' ' ? advanceTable(s) : s
+  }
   if (s.gameOver || s.flashRows) return s
   switch (k) {
     case 'ArrowLeft': return move(s, -1, 0)
@@ -264,7 +283,7 @@ function App() {
   // Lock delay: quando il pezzo è appoggiato, blocca dopo una breve finestra;
   // ogni mossa/rotazione resetta il timer (dipendenza da lockKey).
   useEffect(() => {
-    if (!state.grounded || state.gameOver || state.flashRows) return
+    if (!state.grounded || state.gameOver || state.flashRows || state.payout) return
     const id = setTimeout(() => {
       setState((s) => {
         if (!s.grounded) return s
@@ -273,7 +292,7 @@ function App() {
       })
     }, LOCK_DELAY_MS)
     return () => clearTimeout(id)
-  }, [state.grounded, state.lockKey, state.gameOver, state.flashRows])
+  }, [state.grounded, state.lockKey, state.gameOver, state.flashRows, state.payout])
 
   // Tastiera: input one-shot + auto-repeat (DAS/ARR) per il movimento.
   useEffect(() => {
@@ -319,10 +338,10 @@ function App() {
   // Applica un'azione solo durante il gioco (per i pulsanti touch).
   const act = (fn: (s: GameState) => GameState) =>
     setState((s) =>
-      s.started && !s.gameOver && !s.flashRows ? fn(s) : s,
+      s.started && !s.gameOver && !s.flashRows && !s.payout ? fn(s) : s,
     )
 
-  const { board, piece, next, hold, lines, score, scoreKey, level, best } = state
+  const { board, piece, next, hold, lines, score, scoreKey, level, best, table, target } = state
   const showPiece = state.started && !state.gameOver && !state.flashRows
   const display = showPiece ? mergePiece(board, piece) : board
   const columns = display[0].length
@@ -438,6 +457,27 @@ function App() {
               </div>
             )}
 
+            {state.payout && (
+              <div className="overlay payout">
+                <div className="overlay-kicker">★ BANCO ★</div>
+                <div className="overlay-title">
+                  Tavolo {table}
+                  <br />
+                  superato
+                </div>
+                <div className="overlay-sub">
+                  Hai raccolto {score} fiches. Il prossimo tavolo chiede{' '}
+                  {tableTarget(table + 1)}.
+                </div>
+                <button className="btn" onClick={() => setState(advanceTable)}>
+                  AVANTI · TAVOLO {table + 1}
+                </button>
+                <div className="overlay-tip">
+                  o premi <b>Invio</b>
+                </div>
+              </div>
+            )}
+
             {state.gameOver && (
               <div className="overlay over">
                 <div className="overlay-kicker">PARTITA TERMINATA</div>
@@ -448,8 +488,12 @@ function App() {
                 </div>
                 <div className="over-stats">
                   <div className="over-stat">
-                    <span className="panel-label">PUNTEGGIO</span>
-                    <span className="over-val gold">{score}</span>
+                    <span className="panel-label">TAVOLO</span>
+                    <span className="over-val gold">{table}</span>
+                  </div>
+                  <div className="over-stat">
+                    <span className="panel-label">FICHES</span>
+                    <span className="over-val">{score}</span>
                   </div>
                   <div className="over-stat">
                     <span className="panel-label">RIGHE</span>
@@ -466,7 +510,19 @@ function App() {
 
         {/* ---- RIGHT ---- */}
         <aside className="side right">
-          <Panel label="PUNTEGGIO">
+          <Panel label={`TAVOLO ${table}`}>
+            <div className="progress">
+              <div
+                className="progress-fill"
+                style={{ width: `${Math.min(100, (score / target) * 100)}%` }}
+              />
+            </div>
+            <div className="progress-text">
+              {score} / {target} fiches
+            </div>
+          </Panel>
+
+          <Panel label="FICHES">
             <span key={scoreKey} className="big-score">
               {score}
             </span>
