@@ -719,6 +719,11 @@
   letter-spacing: 0.04em;
   color: #bf86ef;
 }
+.speed-line {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ef7a8e;
+}
 .overlay-suits {
   display: flex;
   gap: 1.4vh;
