@@ -36,6 +36,11 @@
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-9px); }
 }
+@keyframes tpCellFlash {
+  0% { filter: brightness(1); }
+  30% { filter: brightness(1.95) saturate(1.2); }
+  100% { filter: brightness(1); }
+}
 
 .shell {
   display: flex;
@@ -289,6 +294,12 @@
     inset 0 0 0 1.6cqmin color-mix(in srgb, var(--glow), transparent 42%),
     inset 0 0.4px 0 rgba(255, 255, 255, 0.9),
     0 1cqmin 1.4cqmin -0.6cqmin rgba(0, 0, 0, 0.55);
+}
+.cell.flash .card-face {
+  animation: tpCellFlash 0.44s ease both;
+  box-shadow:
+    inset 0 0 0 1.6cqmin #f4e2a6,
+    0 0 3cqmin 1cqmin rgba(243, 214, 120, 0.6);
 }
 .card-face.red { color: #e0566b; }
 .card-face.black { color: #1b1e24; }

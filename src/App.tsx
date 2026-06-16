@@ -25,6 +25,7 @@ interface GameState {
   scoreKey: number // ri-triggera l'animazione del punteggio sui clear
   level: number
   best: HandResult | null
+  flashRows: number[] | null // righe piene in fase di lampeggio
   started: boolean
   gameOver: boolean
 }
@@ -47,6 +48,7 @@ function newGame(started = false): GameState {
     scoreKey: 0,
     level: START_LEVEL,
     best: null,
+    flashRows: null,
     started,
     gameOver: false,
   }
@@ -56,51 +58,71 @@ function isBetter(a: HandResult, b: HandResult | null): boolean {
   return !b || a.category > b.category || (a.category === b.category && a.tie > b.tie)
 }
 
-// Blocca il `piece`, valuta+elimina le righe piene, pesca dal next/bag/deck.
-function lockAndSpawn(state: GameState, piece: Piece): GameState {
-  const merged = mergePiece(state.board, piece)
-
-  const fullRows = merged.filter((row) => row.every((cell) => cell !== null))
-  let best = state.best
-  let gained = 0
-  if (fullRows.length > 0) {
-    let clearBest: HandResult | null = null
-    for (const row of fullRows) {
-      const hand = evalRow((row as FilledCell[]).map((c) => c.card))
-      gained += HAND_POINTS[hand.category]
-      if (isBetter(hand, clearBest)) clearBest = hand
-    }
-    if (fullRows.length > 1) gained *= fullRows.length // bonus multi-riga
-    best = clearBest
-  }
-
-  const { board, cleared } = clearFullRows(merged)
-  const lines = state.lines + cleared
-  const piece2 = makePiece(state.next, board[0].length)
+// Genera il prossimo pezzo da next/bag/deck su una board data.
+function spawnNext(state: GameState, board: Board): GameState {
+  const piece = makePiece(state.next, board[0].length)
   const drawn = drawSpec(state.bag, state.deck)
-
   return {
     ...state,
     board,
-    piece: piece2,
+    piece,
     next: drawn.spec,
     bag: drawn.bag,
     deck: drawn.deck,
     canHold: true,
-    lines,
-    level: levelFromLines(lines),
-    score: state.score + gained,
-    scoreKey: gained > 0 ? state.scoreKey + 1 : state.scoreKey,
-    best,
-    gameOver: collides(board, piece2),
+    gameOver: collides(board, piece),
   }
 }
 
+// Blocca il `piece`. Se completa righe, entra in fase di lampeggio (la pulizia
+// e il punteggio avvengono dopo, in resolveClear). Altrimenti spawn immediato.
+function lockPiece(state: GameState, piece: Piece): GameState {
+  const merged = mergePiece(state.board, piece)
+  const fullRows = merged.reduce<number[]>(
+    (acc, row, i) => (row.every((cell) => cell !== null) ? [...acc, i] : acc),
+    [],
+  )
+  if (fullRows.length === 0) {
+    return spawnNext(state, merged)
+  }
+  return { ...state, board: merged, flashRows: fullRows, canHold: true }
+}
+
+// Fine del lampeggio: valuta le mani, assegna i punti, elimina le righe, spawn.
+function resolveClear(state: GameState): GameState {
+  const rows = state.flashRows
+  if (!rows) return state
+
+  let clearBest: HandResult | null = null
+  let gained = 0
+  for (const r of rows) {
+    const hand = evalRow((state.board[r] as FilledCell[]).map((c) => c.card))
+    gained += HAND_POINTS[hand.category]
+    if (isBetter(hand, clearBest)) clearBest = hand
+  }
+  if (rows.length > 1) gained *= rows.length // bonus multi-riga
+
+  const { board, cleared } = clearFullRows(state.board)
+  const lines = state.lines + cleared
+  return spawnNext(
+    {
+      ...state,
+      flashRows: null,
+      lines,
+      level: levelFromLines(lines),
+      score: state.score + gained,
+      scoreKey: gained > 0 ? state.scoreKey + 1 : state.scoreKey,
+      best: clearBest,
+    },
+    board,
+  )
+}
+
 function step(state: GameState): GameState {
-  if (!state.started || state.gameOver) return state
+  if (!state.started || state.gameOver || state.flashRows) return state
   const moved = tryMove(state.board, state.piece, 0, 1)
   if (moved) return { ...state, piece: moved }
-  return lockAndSpawn(state, state.piece)
+  return lockPiece(state, state.piece)
 }
 
 function move(state: GameState, dx: number, dy: number): GameState {
@@ -119,7 +141,7 @@ function rotate(state: GameState): GameState {
 }
 
 function hardDrop(state: GameState): GameState {
-  return lockAndSpawn(state, dropPosition(state.board, state.piece))
+  return lockPiece(state, dropPosition(state.board, state.piece))
 }
 
 function holdSwap(state: GameState): GameState {
@@ -155,7 +177,7 @@ function reduceKey(s: GameState, k: string): GameState {
   if (!s.started) {
     return (k === 'Enter' || k === ' ') && !s.gameOver ? newGame(true) : s
   }
-  if (s.gameOver) return s
+  if (s.gameOver || s.flashRows) return s
   switch (k) {
     case 'ArrowLeft': return move(s, -1, 0)
     case 'ArrowRight': return move(s, 1, 0)
@@ -202,6 +224,13 @@ function App() {
     return () => clearInterval(id)
   }, [state.started, state.gameOver, state.level])
 
+  // Fine lampeggio righe → pulizia + punteggio + spawn.
+  useEffect(() => {
+    if (!state.flashRows) return
+    const id = setTimeout(() => setState(resolveClear), 440)
+    return () => clearTimeout(id)
+  }, [state.flashRows])
+
   // Tastiera.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -216,12 +245,15 @@ function App() {
   const start = () => setState(newGame(true))
   // Applica un'azione solo durante il gioco (per i pulsanti touch).
   const act = (fn: (s: GameState) => GameState) =>
-    setState((s) => (s.started && !s.gameOver ? fn(s) : s))
+    setState((s) =>
+      s.started && !s.gameOver && !s.flashRows ? fn(s) : s,
+    )
 
   const { board, piece, next, hold, lines, score, scoreKey, level, best } = state
-  const showPiece = state.started && !state.gameOver
+  const showPiece = state.started && !state.gameOver && !state.flashRows
   const display = showPiece ? mergePiece(board, piece) : board
   const columns = display[0].length
+  const flashSet = new Set(state.flashRows ?? [])
 
   const ghost = showPiece
     ? new Set(
@@ -289,8 +321,9 @@ function App() {
                   row.map((cell, x) => {
                     const key = `${y}-${x}`
                     if (cell) {
+                      const flash = flashSet.has(y) ? ' flash' : ''
                       return (
-                        <div key={key} className="cell">
+                        <div key={key} className={`cell${flash}`}>
                           <CardFace card={cell.card} type={cell.type} />
                         </div>
                       )
