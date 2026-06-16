@@ -572,6 +572,13 @@
   letter-spacing: 0.04em;
   color: #e3c46a;
 }
+.bank-total {
+  font-size: 11px;
+  color: #8fa093;
+}
+.bank-total b {
+  color: #e3c46a;
+}
 .overlay-suits {
   display: flex;
   gap: 1.4vh;

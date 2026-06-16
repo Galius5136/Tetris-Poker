@@ -826,6 +826,9 @@ function App() {
             {mods.mult > 1 && (
               <span className="mult-line">moltiplicatore ×{mods.mult}</span>
             )}
+            <span className="bank-total">
+              In banca: <b className="tp-num">{meta.totalBankroll}</b>
+            </span>
           </Panel>
 
           <div className="row2">
