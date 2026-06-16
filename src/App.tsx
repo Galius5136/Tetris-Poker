@@ -354,8 +354,8 @@ function resolveClear(state: GameState): GameState {
     best: clearBest,
   }
 
-  // Tavolo superato: le fiches del tavolo entrano nel bankroll, la progressione
-  // riparte da 0, il gioco si FERMA e si apre il Casinò (minigiochi).
+  // Tavolo superato: le fiches entrano nel bankroll, la progressione riparte da
+  // 0, la GRIGLIA riparte vuota, il gioco si FERMA e si apre il Casinò.
   if (progress >= state.target) {
     const table = state.table + 1
     return spawnNext(
@@ -372,7 +372,7 @@ function resolveClear(state: GameState): GameState {
         stopped: 0,
         wheelStopped: false,
       },
-      board,
+      createEmptyBoard(), // griglia pulita per il nuovo tavolo
     )
   }
 
@@ -542,15 +542,15 @@ function App() {
     }
   }, [state.gameOver, state.bankroll, state.progress])
 
-  // Gravità: la difficoltà accelera a ogni livello salito; Heavy cade ×2.
+  // Gravità: la difficoltà accelera a ogni TAVOLO superato; Heavy cade ×2.
   const heavyFalling = state.piece.special === 'heavy'
   useEffect(() => {
     if (!state.started || state.gameOver) return
-    const base = difficultyTick(tickMs(state.level), state.level - START_LEVEL)
+    const base = difficultyTick(tickMs(state.level), state.table - 1)
     const ms = heavyFalling ? Math.max(MIN_TICK_MS, Math.round(base / 2)) : base
     const id = setInterval(() => setState(step), ms)
     return () => clearInterval(id)
-  }, [state.started, state.gameOver, state.level, heavyFalling])
+  }, [state.started, state.gameOver, state.level, state.table, heavyFalling])
 
   // Fine lampeggio righe → pulizia + punteggio + spawn.
   useEffect(() => {
@@ -702,7 +702,7 @@ function App() {
   const slotCards = reels.map((i) => REEL_CARDS[i])
   const slotOutcome = game === 'slot' && stopped >= 3 ? evalThreeCardHand(slotCards) : null
   const rouletteIdx = rouletteIndexAt(wheelAngle)
-  const speedMult = speedMultiplier(state.level - START_LEVEL)
+  const speedMult = speedMultiplier(state.table - 1)
   const continueLabel = levelEnd ? `CONTINUA · TAVOLO ${table}` : 'CHIUDI (P)'
   const showPiece = state.started && !state.gameOver && !state.flashRows
   const display = showPiece ? mergePiece(board, piece) : board
