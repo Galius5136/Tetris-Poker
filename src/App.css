@@ -425,6 +425,30 @@
   color: #bf86ef;
 }
 
+/* burst: lampo dell'effetto del pezzo speciale al lock */
+@keyframes tpBurst {
+  0% { opacity: 0; }
+  25% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+.board-burst {
+  position: absolute;
+  inset: 1.3vh;
+  border-radius: 2.2vh;
+  pointer-events: none;
+  z-index: 3;
+  animation: tpBurst 0.34s ease-out;
+}
+.board-burst.burst-laser {
+  background: linear-gradient(0deg, transparent, rgba(239, 122, 142, 0.55), transparent);
+}
+.board-burst.burst-cleaver {
+  background: linear-gradient(90deg, transparent, rgba(106, 163, 242, 0.5), transparent);
+}
+.board-burst.burst-bomb {
+  background: radial-gradient(circle at 50% 60%, rgba(239, 90, 90, 0.7), transparent 70%);
+}
+
 .cell.flash .card-face {
   animation: tpCellFlash 0.44s ease both;
   box-shadow:

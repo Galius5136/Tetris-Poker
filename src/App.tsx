@@ -16,7 +16,7 @@ import {
 } from './game/specialEffects'
 import type { Board, FilledCell } from './game/board'
 import { mergePiece, pieceCells } from './game/tetromino'
-import type { Piece, TetrominoType } from './game/tetromino'
+import type { Piece, TetrominoType, SpecialKind } from './game/tetromino'
 import { collides, tryMove, tryRotate, tryMirror, dropPosition } from './game/engine'
 import { drawSpec, makePiece, type PieceSpec, type SpecialRule } from './game/spawn'
 import { shuffle, fullDeck, buildDeckTemplate, type Deck } from './game/deck'
@@ -81,6 +81,7 @@ interface GameState {
   config: RunConfig // effetti dei joker equipaggiati, fissati all'avvio del run
   deckTemplate: Deck // mazzo-modello del run (composizione Cat.4)
   specials: SpecialRule[] // regole di spawn dei pezzi speciali (Cat.2)
+  burst: SpecialKind | null // effetto visivo transitorio (laser/bomb/cleaver)
   heavyClear: boolean // l'ultima pulizia è stata innescata da un pezzo Heavy
   streakPending: boolean // STREAK_BONUS: +15% in attesa per la prossima mano
   wildSuit: Suit | null // FLUSH_WILD_SUIT: seme jolly scelto a inizio run
@@ -135,6 +136,7 @@ function newGame(
     config,
     deckTemplate,
     specials,
+    burst: null,
     heavyClear: false,
     streakPending: false,
     wildSuit,
@@ -254,9 +256,12 @@ function lockPiece(state: GameState, piece: Piece): GameState {
   // Pezzi che mutano la board al lock, senza scoring poker (Cat.2).
   // TODO(sfx): suoni di placement/effetto per i pezzi speciali (laser, cleaver,
   // bomb, ghost, anchor) — fuori scope del CR, qui solo il marcatore.
-  if (piece.special === 'laser') return spawnNext(state, applyLaser(state.board, piece))
-  if (piece.special === 'cleaver') return spawnNext(state, applyCleaver(state.board, piece))
-  if (piece.special === 'bomb') return spawnNext(state, applyBomb(state.board, piece))
+  if (piece.special === 'laser')
+    return spawnNext({ ...state, burst: 'laser' }, applyLaser(state.board, piece))
+  if (piece.special === 'cleaver')
+    return spawnNext({ ...state, burst: 'cleaver' }, applyCleaver(state.board, piece))
+  if (piece.special === 'bomb')
+    return spawnNext({ ...state, burst: 'bomb' }, applyBomb(state.board, piece))
   if (piece.special === 'ghost') {
     const g = resolveGhost(state.board, piece)
     return lockPiece({ ...state, board: g.board }, g.piece)
@@ -552,6 +557,13 @@ function App() {
     return () => clearTimeout(id)
   }, [state.flashRows])
 
+  // Effetto visivo dei pezzi speciali: si spegne dopo un attimo.
+  useEffect(() => {
+    if (!state.burst) return
+    const id = setTimeout(() => setState((s) => ({ ...s, burst: null })), 340)
+    return () => clearTimeout(id)
+  }, [state.burst])
+
   // Rulli della slot: quelli non ancora fermati scorrono a velocità costante.
   useEffect(() => {
     if (state.game !== 'slot' || state.stopped >= 3) return
@@ -795,6 +807,10 @@ function App() {
                 )}
               </div>
             </div>
+
+            {state.burst && (
+              <div className={`board-burst burst-${state.burst}`} />
+            )}
 
             {!state.started && !state.gameOver && (
               <div className="overlay start">
