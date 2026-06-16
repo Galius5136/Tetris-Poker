@@ -1,8 +1,8 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import './App.css'
 import { createEmptyBoard, clearFullRows, type Board } from './game/board'
-import { mergePiece, type Piece } from './game/tetromino'
-import { collides, tryMove, tryRotate } from './game/engine'
+import { mergePiece, pieceCells, type Piece } from './game/tetromino'
+import { collides, tryMove, tryRotate, dropPosition } from './game/engine'
 import { spawnPiece } from './game/spawn'
 import { shuffledDeck, type Deck } from './game/deck'
 import { isRedSuit, type Card } from './game/cards'
@@ -85,13 +85,7 @@ function rotate(state: GameState): GameState {
 
 // Caduta istantanea: scende fin dove può, poi blocca e respawna.
 function hardDrop(state: GameState): GameState {
-  let piece = state.piece
-  for (;;) {
-    const next = tryMove(state.board, piece, 0, 1)
-    if (!next) break
-    piece = next
-  }
-  return lockAndSpawn(state, piece)
+  return lockAndSpawn(state, dropPosition(state.board, state.piece))
 }
 
 function App() {
@@ -125,6 +119,15 @@ function App() {
   const display = gameOver ? board : mergePiece(board, piece)
   const columns = display[0].length
 
+  // Celle dove atterrerebbe il pezzo (ghost), solo dove la board è vuota.
+  const ghost = gameOver
+    ? new Set<string>()
+    : new Set(
+        pieceCells(dropPosition(board, piece))
+          .filter(({ y }) => y >= 0)
+          .map(({ x, y }) => `${y}-${x}`),
+      )
+
   const boardStyle = {
     gridTemplateColumns: `repeat(${columns}, 1fr)`,
     '--rows': display.length,
@@ -154,20 +157,22 @@ function App() {
           <div className="board" style={boardStyle}>
             {display.map((row, y) =>
               row.map((cell, x) => {
-                const tone = cell && isRedSuit(cell.suit) ? 'red' : 'black'
+                if (cell) {
+                  const tone = isRedSuit(cell.suit) ? 'red' : 'black'
+                  return (
+                    <div key={`${y}-${x}`} className={`cell filled ${tone}`}>
+                      <span className="rank">{cell.rank}</span>
+                      <span className="corner-suit">{cell.suit}</span>
+                      <span className="center-suit">{cell.suit}</span>
+                    </div>
+                  )
+                }
+                const isGhost = ghost.has(`${y}-${x}`)
                 return (
                   <div
                     key={`${y}-${x}`}
-                    className={cell ? `cell filled ${tone}` : 'cell'}
-                  >
-                    {cell && (
-                      <>
-                        <span className="rank">{cell.rank}</span>
-                        <span className="corner-suit">{cell.suit}</span>
-                        <span className="center-suit">{cell.suit}</span>
-                      </>
-                    )}
-                  </div>
+                    className={isGhost ? 'cell ghost' : 'cell'}
+                  />
                 )
               }),
             )}

@@ -26,9 +26,24 @@ export function tryMove(
   return collides(board, moved) ? null : moved
 }
 
-// Ruota il pezzo di 90° orari se la nuova posizione non collide.
-// NB: nessun "wall kick" ancora — vicino ai bordi la rotazione può fallire.
+// Ruota il pezzo di 90° orari. Prova qualche spostamento orizzontale
+// ("wall kick") così la rotazione vicino ai bordi non fallisce.
 export function tryRotate(board: Board, piece: Piece): Piece | null {
   const rotated: Piece = { ...piece, rotation: piece.rotation + 1 }
-  return collides(board, rotated) ? null : rotated
+  for (const kick of [0, -1, 1, -2, 2]) {
+    const candidate: Piece = { ...rotated, x: rotated.x + kick }
+    if (!collides(board, candidate)) return candidate
+  }
+  return null
+}
+
+// Posizione del pezzo dopo una caduta fino in fondo (per la ghost piece).
+export function dropPosition(board: Board, piece: Piece): Piece {
+  let p = piece
+  for (;;) {
+    const next = tryMove(board, p, 0, 1)
+    if (!next) break
+    p = next
+  }
+  return p
 }
