@@ -59,4 +59,13 @@ describe('startingBankroll (Compound Interest)', () => {
     const c = buildRunConfig(['COMPOUNDING_INTEREST'])
     expect(startingBankroll(c, 1000)).toBe(1100)
   })
+  it('compone correttamente su 3 run simulati', () => {
+    const c = buildRunConfig(['COMPOUNDING_INTEREST'])
+    let last = 1000
+    const starts = [0, 0, 0].map(() => {
+      last = startingBankroll(c, last)
+      return last
+    })
+    expect(starts).toEqual([1100, 1210, 1331])
+  })
 })

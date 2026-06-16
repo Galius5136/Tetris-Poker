@@ -6,12 +6,14 @@ import {
   type ReactNode,
 } from 'react'
 import './App.css'
+import { createEmptyBoard, clearRows } from './game/board'
 import {
-  createEmptyBoard,
-  clearRows,
-  clearColumnsFrom,
-  clearArea,
-} from './game/board'
+  applyLaser,
+  applyCleaver,
+  applyBomb,
+  resolveGhost,
+  stampAnchor,
+} from './game/specialEffects'
 import type { Board, FilledCell } from './game/board'
 import { mergePiece, pieceCells } from './game/tetromino'
 import type { Piece, TetrominoType } from './game/tetromino'
@@ -252,65 +254,18 @@ function lockPiece(state: GameState, piece: Piece): GameState {
   // Pezzi che mutano la board al lock, senza scoring poker (Cat.2).
   // TODO(sfx): suoni di placement/effetto per i pezzi speciali (laser, cleaver,
   // bomb, ghost, anchor) — fuori scope del CR, qui solo il marcatore.
-  if (piece.special === 'laser') {
-    const rows = [...new Set(pieceCells(piece).filter((c) => c.y >= 0).map((c) => c.y))]
-    return spawnNext(state, clearRows(state.board, rows))
-  }
-  if (piece.special === 'cleaver') {
-    const cells = pieceCells(piece).filter((c) => c.y >= 0)
-    const cols = [...new Set(cells.map((c) => c.x))]
-    const fromY = Math.min(...cells.map((c) => c.y)) // dal pezzo in giù
-    return spawnNext(state, clearColumnsFrom(state.board, cols, fromY))
-  }
-  if (piece.special === 'bomb') {
-    const cells = pieceCells(piece)
-    const xs = cells.map((c) => c.x)
-    const ys = cells.map((c) => c.y)
-    // esplosione: bounding box del pezzo allargato di 1 in ogni direzione
-    const board = clearArea(
-      state.board,
-      Math.min(...xs) - 1,
-      Math.min(...ys) - 1,
-      Math.max(...xs) + 1,
-      Math.max(...ys) + 1,
-    )
-    return spawnNext(state, board)
-  }
+  if (piece.special === 'laser') return spawnNext(state, applyLaser(state.board, piece))
+  if (piece.special === 'cleaver') return spawnNext(state, applyCleaver(state.board, piece))
+  if (piece.special === 'bomb') return spawnNext(state, applyBomb(state.board, piece))
   if (piece.special === 'ghost') {
-    // attraversa UNA cella occupata: la libera e scende di una riga, poi lock normale.
-    const own = new Set(pieceCells(piece).map((c) => `${c.y}-${c.x}`))
-    const blockers = pieceCells(piece)
-      .map((c) => ({ x: c.x, y: c.y + 1 }))
-      .filter(
-        (c) =>
-          c.y >= 0 &&
-          c.y < state.board.length &&
-          !own.has(`${c.y}-${c.x}`) &&
-          state.board[c.y][c.x] !== null,
-      )
-    const plain: Piece = { ...piece, special: null }
-    if (blockers.length === 0) return lockPiece(state, plain)
-    const target = blockers.reduce((a, b) => (a.y < b.y ? a : b)) // il più in alto
-    const cleared = state.board.map((row, y) =>
-      y === target.y ? row.map((cell, x) => (x === target.x ? null : cell)) : row,
-    )
-    return lockPiece({ ...state, board: cleared }, { ...plain, y: plain.y + 1 })
+    const g = resolveGhost(state.board, piece)
+    return lockPiece({ ...state, board: g.board }, g.piece)
   }
 
   const now = Date.now()
   let merged = mergePiece(state.board, piece)
   // ANCHOR: marca le proprie celle come bloccate per 3 secondi.
-  if (piece.special === 'anchor') {
-    const until = now + 3000
-    const own = new Set(
-      pieceCells(piece).filter((c) => c.y >= 0).map((c) => `${c.y}-${c.x}`),
-    )
-    merged = merged.map((row, y) =>
-      row.map((cell, x) =>
-        cell && own.has(`${y}-${x}`) ? { ...cell, anchorUntil: until } : cell,
-      ),
-    )
-  }
+  if (piece.special === 'anchor') merged = stampAnchor(merged, piece, now + 3000)
   // Righe pulibili: piene e NON bloccate da un'ancora ancora attiva.
   const fullRows = merged.reduce<number[]>((acc, row, i) => {
     const full = row.every((cell) => cell !== null)
