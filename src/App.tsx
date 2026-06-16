@@ -40,7 +40,7 @@ import {
 import { CardFace } from './ui/CardFace'
 import { MiniGrid } from './ui/MiniGrid'
 import { loadMeta, saveMeta, bankRun, type MetaState } from './meta/metaGameStore'
-import { selectShop, buyUpgrade } from './meta/shop'
+import { selectShop, buyUpgrade, grantRandomJoker } from './meta/shop'
 import { ShopScreen } from './meta/ShopScreen'
 import type { Upgrade, UpgradeId } from './meta/upgrades'
 import {
@@ -92,6 +92,7 @@ interface GameState {
   doubleDownAvail: boolean // DOUBLE_DOWN: ancora disponibile (una volta per run)
   doubleDownArmed: boolean // DOUBLE_DOWN: armato per la prossima mano
   lastHandCat: number | null // categoria dell'ultima mano (per il confronto Double Down)
+  pendingFreeJoker: boolean // ricompensa Boss da erogare (joker gratis)
   started: boolean
   gameOver: boolean
 }
@@ -151,6 +152,7 @@ function newGame(
     doubleDownAvail: config.doubleDown,
     doubleDownArmed: false,
     lastHandCat: null,
+    pendingFreeJoker: false,
     started,
     gameOver: false,
   }
@@ -370,16 +372,17 @@ function resolveClear(state: GameState): GameState {
   if (progress >= state.target) {
     const table = state.table + 1
     const modifier = modifierForTable(table, state.seed)
-    const reward = state.modifier.reward.fiches ?? 0 // ricompensa del tavolo superato
+    const reward = state.modifier.reward // ricompensa del tavolo appena superato
     return spawnNext(
       {
         ...base,
         progress: 0,
-        bankroll: state.bankroll + progress + reward,
+        bankroll: state.bankroll + progress + (reward.fiches ?? 0),
         scoreKey: state.scoreKey + 1,
         table,
         target: Math.round(tableTarget(table) * modifier.targetMult),
         modifier,
+        pendingFreeJoker: state.pendingFreeJoker || !!reward.freeJoker,
         paused: true,
         levelEnd: true,
         game: 'menu',
@@ -581,6 +584,17 @@ function App() {
     const id = setTimeout(() => setState((s) => ({ ...s, burst: null })), 340)
     return () => clearTimeout(id)
   }, [state.burst])
+
+  // Ricompensa Boss "joker gratis": erogata nel meta (vale dal run successivo).
+  useEffect(() => {
+    if (!state.pendingFreeJoker) return
+    setMeta((m) => {
+      const next = grantRandomJoker(m)
+      saveMeta(next)
+      return next
+    })
+    setState((s) => ({ ...s, pendingFreeJoker: false }))
+  }, [state.pendingFreeJoker])
 
   // Rulli della slot: quelli non ancora fermati scorrono a velocità costante.
   useEffect(() => {
@@ -866,6 +880,21 @@ function App() {
                 <div className="casino-bank">
                   Bankroll: <b>{bankroll}</b> fiches
                 </div>
+
+                {levelEnd && (
+                  <div className={`next-table next-table-${state.modifier.kind}`}>
+                    <span className="nt-label">PROSSIMO · TAVOLO {table}</span>
+                    <b>{state.modifier.name}</b>
+                    <span>{state.modifier.desc}</span>
+                    <span className="nt-target">
+                      Obiettivo {target} fiches
+                      {state.modifier.reward.fiches
+                        ? ` · premio +${state.modifier.reward.fiches}`
+                        : ''}
+                      {state.modifier.reward.freeJoker ? ' · +1 joker' : ''}
+                    </span>
+                  </div>
+                )}
 
                 {/* --- MENU: scelta del gioco --- */}
                 {game === 'menu' && (

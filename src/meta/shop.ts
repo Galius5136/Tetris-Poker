@@ -65,6 +65,22 @@ export function canBuy(meta: MetaState, id: UpgradeId): boolean {
   return meta.totalBankroll >= UPGRADES[id].cost
 }
 
+// Ricompensa "joker gratis" (Boss): equipaggia un upgrade casuale non posseduto,
+// entro il cap. IMPURO (Math.random) ma è un premio, non un minigioco skill.
+export function grantRandomJoker(meta: MetaState): MetaState {
+  if (meta.activeJokers.length >= MAX_ACTIVE_JOKERS) return meta
+  const candidates = [...IMPLEMENTED].filter(
+    (id) => !meta.purchasedUpgrades.includes(id),
+  )
+  if (candidates.length === 0) return meta
+  const id = candidates[Math.floor(Math.random() * candidates.length)]
+  return {
+    ...meta,
+    purchasedUpgrades: [...meta.purchasedUpgrades, id],
+    activeJokers: [...meta.activeJokers, id],
+  }
+}
+
 // Acquista: scala il costo dal totale, sblocca ed equipaggia (cap garantito da canBuy).
 export function buyUpgrade(meta: MetaState, id: UpgradeId): MetaState {
   if (!canBuy(meta, id)) return meta
