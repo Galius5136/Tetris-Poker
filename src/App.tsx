@@ -394,18 +394,20 @@ function App() {
   const [meta, setMeta] = useState<MetaState>(() => loadMeta())
   const bankedRef = useRef(false)
 
-  // A fine run: il bankroll finale confluisce nel totale persistente (una
-  // sola volta per run). Non tocca il run loop.
+  // A fine run: il valore finale del run (bankroll già da parte + il progresso
+  // del tavolo in corso) confluisce nel totale persistente, una sola volta per
+  // run. Non tocca il run loop.
   useEffect(() => {
     if (state.gameOver && !bankedRef.current) {
       bankedRef.current = true
+      const runWorth = state.bankroll + state.progress
       setMeta((m) => {
-        const next = bankRun(m, state.bankroll)
+        const next = bankRun(m, runWorth)
         saveMeta(next)
         return next
       })
     }
-  }, [state.gameOver, state.bankroll])
+  }, [state.gameOver, state.bankroll, state.progress])
 
   // Gravità: velocità in base al livello, solo a gioco avviato.
   useEffect(() => {
@@ -784,7 +786,7 @@ function App() {
                   </div>
                   <div className="over-stat">
                     <span className="panel-label">BANKROLL</span>
-                    <span className="over-val">{bankroll}</span>
+                    <span className="over-val">{bankroll + progress}</span>
                   </div>
                   <div className="over-stat">
                     <span className="panel-label">RIGHE</span>
