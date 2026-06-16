@@ -14,6 +14,7 @@ import { collides, tryMove, tryRotate, dropPosition } from './game/engine'
 import { drawSpec, makePiece, type PieceSpec } from './game/spawn'
 import { shuffledDeck, type Deck } from './game/deck'
 import { evalRow, HAND_POINTS, type HandResult } from './game/poker'
+import { SUITS, type Suit } from './game/cards'
 import { levelFromLines, tickMs, START_LEVEL } from './game/levels'
 import { tableTarget } from './game/run'
 import {
@@ -71,6 +72,10 @@ interface GameState {
   mods: Modifiers // potenziamenti accumulati dai perk (cumulativi)
   config: RunConfig // effetti dei joker equipaggiati, fissati all'avvio del run
   streakPending: boolean // STREAK_BONUS: +15% in attesa per la prossima mano
+  wildSuit: Suit | null // FLUSH_WILD_SUIT: seme jolly scelto a inizio run
+  doubleDownAvail: boolean // DOUBLE_DOWN: ancora disponibile (una volta per run)
+  doubleDownArmed: boolean // DOUBLE_DOWN: armato per la prossima mano
+  lastHandCat: number | null // categoria dell'ultima mano (per il confronto Double Down)
   started: boolean
   gameOver: boolean
 }
@@ -81,6 +86,7 @@ function newGame(
   started = false,
   config: RunConfig = NEUTRAL_CONFIG,
   startBankroll = 0,
+  wildSuit: Suit | null = null,
 ): GameState {
   const board = createEmptyBoard()
   const width = board[0].length
@@ -115,6 +121,10 @@ function newGame(
     mods: BASE_MODIFIERS,
     config,
     streakPending: false,
+    wildSuit,
+    doubleDownAvail: config.doubleDown,
+    doubleDownArmed: false,
+    lastHandCat: null,
     started,
     gameOver: false,
   }
@@ -242,17 +252,37 @@ function resolveClear(state: GameState): GameState {
   if (!rows) return state
 
   const cfg = state.config
+  // Cat.3: regole poker dai joker (5 uguali, scala con buco, seme jolly).
+  const evalOpts = {
+    fiveOfAKind: cfg.fiveOfAKind,
+    straightGap: cfg.straightGap,
+    wildSuit: state.wildSuit,
+  }
   let clearBest: HandResult | null = null
   let gained = 0
   for (const r of rows) {
-    const hand = evalRow((state.board[r] as FilledCell[]).map((c) => c.card))
-    // Cat.1 per-categoria: PAIR_GRINDER (×3) e SUIT_PREMIUM (×2)
+    const hand = evalRow((state.board[r] as FilledCell[]).map((c) => c.card), evalOpts)
+    // Cat.1 per-categoria: PAIR_GRINDER ×3, SUIT_PREMIUM ×2, POKER_KICKER (carta alta)
     gained += handPointsWithConfig(hand.category, HAND_POINTS[hand.category], cfg)
     if (isBetter(hand, clearBest)) clearBest = hand
   }
   if (rows.length > 1) gained *= rows.length // bonus multi-riga
   gained = Math.round(gained * cfg.handPayoutMult) // HIGH_ROLLER
   if (state.streakPending) gained = Math.round(gained * STREAK_BONUS_MULT) // STREAK_BONUS
+
+  // DOUBLE_DOWN: se armato, raddoppia se la mano non è peggiore della precedente;
+  // altrimenti niente raddoppio e penalità -10% sul progresso. Si consuma.
+  let doubleDownArmed = state.doubleDownArmed
+  let doubleDownAvail = state.doubleDownAvail
+  let penalty = false
+  if (state.doubleDownArmed && clearBest) {
+    const worse = state.lastHandCat !== null && clearBest.category < state.lastHandCat
+    if (worse) penalty = true
+    else gained *= 2
+    doubleDownArmed = false
+    doubleDownAvail = false
+  }
+
   gained = applyModifiers(gained, state.mods) // perk casinò: moltiplicatore + bonus
 
   // STREAK_BONUS: pulire 3+ righe arma il +15% per la PROSSIMA mano.
@@ -260,12 +290,16 @@ function resolveClear(state: GameState): GameState {
 
   const { board, cleared } = clearFullRows(state.board)
   const lines = state.lines + cleared
-  const progress = state.progress + gained
+  const rawProgress = state.progress + gained
+  const progress = penalty ? Math.floor(rawProgress * 0.9) : rawProgress
 
   const base = {
     ...state,
     flashRows: null,
     streakPending,
+    doubleDownArmed,
+    doubleDownAvail,
+    lastHandCat: clearBest ? clearBest.category : state.lastHandCat,
     lines,
     level: levelFromLines(lines),
     best: clearBest,
@@ -357,7 +391,7 @@ function holdSwap(state: GameState): GameState {
 
 const HANDLED = [
   'ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp',
-  'x', 'X', ' ', 'c', 'C', 'Enter', 'p', 'P', 'Escape',
+  'x', 'X', ' ', 'c', 'C', 'Enter', 'p', 'P', 'Escape', 'd', 'D',
 ]
 
 // Movimento con auto-repeat gestito dal gioco (DAS/ARR), non dal SO.
@@ -389,6 +423,12 @@ function reduceKey(s: GameState, k: string): GameState {
     case ' ': return hardDrop(s)
     case 'c':
     case 'C': return holdSwap(s)
+    case 'd':
+    case 'D':
+      // DOUBLE_DOWN: arma il raddoppio per la prossima mano (una volta per run).
+      return s.doubleDownAvail && !s.doubleDownArmed
+        ? { ...s, doubleDownArmed: true }
+        : s
     default: return s
   }
 }
@@ -546,7 +586,11 @@ function App() {
     bankedRef.current = false // nuovo run → il bankroll andrà bancato a fine partita
     const config = buildRunConfig(meta.activeJokers)
     const startBankroll = startingBankroll(config, meta.lastRunBankroll)
-    setState(newGame(true, config, startBankroll))
+    // FLUSH_WILD_SUIT: scegli un seme jolly per questo run.
+    const wildSuit = config.flushWild
+      ? SUITS[Math.floor(Math.random() * SUITS.length)]
+      : null
+    setState(newGame(true, config, startBankroll, wildSuit))
   }
   // Ref aggiornati a ogni render, per l'handler tastiera (deps []).
   startRef.current = startRun
@@ -884,6 +928,19 @@ function App() {
             <span className="bank-total">
               In banca: <b className="tp-num">{meta.totalBankroll}</b>
             </span>
+            {state.wildSuit && (
+              <span className="fx-line">Jolly colore: {state.wildSuit}</span>
+            )}
+            {state.config.doubleDown && (
+              <span className="fx-line">
+                D ·{' '}
+                {state.doubleDownArmed
+                  ? 'ARMATO ⚡'
+                  : state.doubleDownAvail
+                    ? 'pronto'
+                    : 'usato'}
+              </span>
+            )}
           </Panel>
 
           <div className="row2">

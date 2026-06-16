@@ -51,3 +51,21 @@ it('HAND_POINTS premia le categorie più alte', () => {
   expect(HAND_POINTS[9]).toBeGreaterThan(HAND_POINTS[1])
   expect(HAND_POINTS[8]).toBeGreaterThan(HAND_POINTS[7])
 })
+
+describe('EvalOptions (modificatori dei joker)', () => {
+  it('FIVE_OF_A_KIND: 5 uguali → cat 10 (solo se abilitato)', () => {
+    const five = [c('A', '♠'), c('A', '♥'), c('A', '♦'), c('A', '♣'), c('A', '♠')]
+    expect(evalRow(five).category).not.toBe(10) // senza il perk non esiste
+    expect(evalRow(five, { fiveOfAKind: true }).category).toBe(10)
+  })
+  it('STRAIGHT_GAP: scala con un buco valida solo se abilitato', () => {
+    const gap = [c('2', '♠'), c('3', '♥'), c('5', '♦'), c('6', '♣'), c('7', '♠')]
+    expect(evalRow(gap).category).toBe(1) // carta alta senza il perk
+    expect(evalRow(gap, { straightGap: true }).category).toBe(5) // scala
+  })
+  it('FLUSH_WILD_SUIT: il seme jolly completa il colore', () => {
+    const hand = [c('A', '♠'), c('K', '♠'), c('Q', '♠'), c('9', '♠'), c('4', '♥')]
+    expect(evalRow(hand).category).toBe(1) // 4 picche + 1 cuori = carta alta
+    expect(evalRow(hand, { wildSuit: '♥' }).category).toBe(6) // cuori jolly → colore
+  })
+})

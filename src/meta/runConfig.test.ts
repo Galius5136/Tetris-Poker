@@ -19,6 +19,19 @@ describe('buildRunConfig', () => {
     expect(c.pairTriple).toBe(true)
     expect(c.streakBonus).toBe(true)
   })
+  it('attiva i flag della Cat.3', () => {
+    const c = buildRunConfig(['FIVE_OF_A_KIND', 'STRAIGHT_GAP', 'DOUBLE_DOWN'])
+    expect(c.fiveOfAKind).toBe(true)
+    expect(c.straightGap).toBe(true)
+    expect(c.doubleDown).toBe(true)
+  })
+})
+
+describe('POKER_KICKER', () => {
+  it('triplica la carta alta (cat 1)', () => {
+    const c = buildRunConfig(['POKER_KICKER'])
+    expect(handPointsWithConfig(1, 4, c)).toBe(12)
+  })
 })
 
 describe('handPointsWithConfig', () => {
