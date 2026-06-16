@@ -30,6 +30,9 @@ import {
 import { CardFace } from './ui/CardFace'
 import { MiniGrid } from './ui/MiniGrid'
 import { loadMeta, saveMeta, bankRun, type MetaState } from './meta/metaGameStore'
+import { selectShop, buyUpgrade } from './meta/shop'
+import { ShopScreen } from './meta/ShopScreen'
+import type { Upgrade, UpgradeId } from './meta/upgrades'
 
 interface GameState {
   board: Board
@@ -393,6 +396,8 @@ function App() {
   const [state, setState] = useState<GameState>(() => newGame())
   const [meta, setMeta] = useState<MetaState>(() => loadMeta())
   const bankedRef = useRef(false)
+  // Vetrina dello shop: null = chiuso; array = aperto (snapshot stabile).
+  const [shopOffers, setShopOffers] = useState<Upgrade[] | null>(null)
 
   // A fine run: il valore finale del run (bankroll già da parte + il progresso
   // del tavolo in corso) confluisce nel totale persistente, una sola volta per
@@ -508,6 +513,18 @@ function App() {
   const start = () => {
     bankedRef.current = false // nuovo run → il bankroll andrà bancato a fine partita
     setState(newGame(true))
+  }
+  // Shop tra un run e l'altro: apri (snapshot della vetrina), compra, gioca.
+  const openShop = () => setShopOffers(selectShop(meta))
+  const buy = (id: UpgradeId) =>
+    setMeta((m) => {
+      const next = buyUpgrade(m, id)
+      saveMeta(next)
+      return next
+    })
+  const playFromShop = () => {
+    setShopOffers(null)
+    start()
   }
   // Applica un'azione solo durante il gioco (per i pulsanti touch).
   const act = (fn: (s: GameState) => GameState) =>
@@ -797,8 +814,8 @@ function App() {
                   Bankroll totale:{' '}
                   <b className="tp-num">{meta.totalBankroll}</b>
                 </div>
-                <button className="btn" onClick={start}>
-                  ↻ RIGIOCA
+                <button className="btn" onClick={openShop}>
+                  SHOP →
                 </button>
               </div>
             )}
@@ -887,6 +904,15 @@ function App() {
           </div>
         </aside>
       </div>
+
+      {shopOffers && (
+        <ShopScreen
+          meta={meta}
+          offers={shopOffers}
+          onBuy={buy}
+          onPlay={playFromShop}
+        />
+      )}
     </main>
   )
 }
