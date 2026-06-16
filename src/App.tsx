@@ -30,8 +30,9 @@ interface GameState {
   bag: TetrominoType[]
   deck: Deck
   lines: number
-  score: number
-  scoreKey: number // ri-triggera l'animazione del punteggio sui clear
+  progress: number // fiches del tavolo corrente (riparte da 0 ogni tavolo)
+  bankroll: number // valuta accumulata, spesa ai minigiochi
+  scoreKey: number // ri-triggera l'animazione del bankroll
   level: number
   best: HandResult | null
   flashRows: number[] | null // righe piene in fase di lampeggio
@@ -40,6 +41,7 @@ interface GameState {
   table: number // tavolo corrente del run
   target: number // fiches necessarie per superare il tavolo
   paused: boolean // Casinò aperto (gioco in pausa)
+  levelEnd: boolean // pausa obbligatoria di fine tavolo (minigiochi abilitati)
   spinning: boolean // un giro di slot pagato è in corso/concluso
   reels: number[] // posizione dei 3 rulli (indici in REEL_CARDS)
   stopped: number // quanti rulli sono già fermi (0..3)
@@ -64,7 +66,8 @@ function newGame(started = false): GameState {
     bag: second.bag,
     deck: second.deck,
     lines: 0,
-    score: 0,
+    progress: 0,
+    bankroll: 0,
     scoreKey: 0,
     level: START_LEVEL,
     best: null,
@@ -74,6 +77,7 @@ function newGame(started = false): GameState {
     table: 1,
     target: tableTarget(1),
     paused: false,
+    levelEnd: false,
     spinning: false,
     reels: INITIAL_REELS,
     stopped: 0,
@@ -85,29 +89,29 @@ function newGame(started = false): GameState {
 
 // --- Casinò (a richiesta, in pausa) ---
 
-// Apre il Casinò mettendo in pausa il gioco.
+// Apre il Casinò a richiesta, mettendo in pausa il gioco.
 function openCasino(state: GameState): GameState {
   if (!state.started || state.gameOver || state.flashRows || state.paused) {
     return state
   }
-  return { ...state, paused: true, spinning: false }
+  return { ...state, paused: true, levelEnd: false, spinning: false }
 }
 
-// Chiude il Casinò (non a metà di un giro pagato).
+// Chiude il Casinò / prosegue dal fine tavolo (non a metà di un giro pagato).
 function closeCasino(state: GameState): GameState {
   if (state.spinning && state.stopped < 3) return state
-  return { ...state, paused: false, spinning: false }
+  return { ...state, paused: false, levelEnd: false, spinning: false }
 }
 
-// Avvia un giro di slot: costa SLOT_COST fiches (scalate dal totale).
+// Avvia un giro di slot: costa SLOT_COST fiches, scalate dal bankroll.
 function startSpin(state: GameState): GameState {
-  if (state.score < SLOT_COST) return state // fiches insufficienti
+  if (state.bankroll < SLOT_COST) return state // bankroll insufficiente
   return {
     ...state,
     spinning: true,
     stopped: 0,
     reels: INITIAL_REELS,
-    score: state.score - SLOT_COST,
+    bankroll: state.bankroll - SLOT_COST,
   }
 }
 
@@ -183,30 +187,37 @@ function resolveClear(state: GameState): GameState {
 
   const { board, cleared } = clearFullRows(state.board)
   const lines = state.lines + cleared
-  const score = state.score + gained
+  const progress = state.progress + gained
 
-  // Tavolo superato → avanza in automatico (il Casinò si apre a richiesta).
-  let table = state.table
-  let target = state.target
-  while (score >= target) {
-    table += 1
-    target = tableTarget(table)
+  const base = {
+    ...state,
+    flashRows: null,
+    lines,
+    level: levelFromLines(lines),
+    best: clearBest,
   }
 
-  return spawnNext(
-    {
-      ...state,
-      flashRows: null,
-      lines,
-      level: levelFromLines(lines),
-      score,
-      scoreKey: gained > 0 ? state.scoreKey + 1 : state.scoreKey,
-      best: clearBest,
-      table,
-      target,
-    },
-    board,
-  )
+  // Tavolo superato: le fiches del tavolo entrano nel bankroll, la progressione
+  // riparte da 0, il gioco si FERMA e si apre il Casinò (minigiochi).
+  if (progress >= state.target) {
+    const table = state.table + 1
+    return spawnNext(
+      {
+        ...base,
+        progress: 0,
+        bankroll: state.bankroll + progress,
+        scoreKey: state.scoreKey + 1,
+        table,
+        target: tableTarget(table),
+        paused: true,
+        levelEnd: true,
+        spinning: false,
+      },
+      board,
+    )
+  }
+
+  return spawnNext({ ...base, progress }, board)
 }
 
 // Tick di gravità: scende di una riga; se non può, segna "appoggiato"
@@ -226,7 +237,7 @@ function move(state: GameState, dx: number, dy: number): GameState {
 function softDrop(state: GameState): GameState {
   const moved = tryMove(state.board, state.piece, 0, 1)
   if (!moved) return afterAction(state)
-  return afterAction({ ...state, piece: moved, score: state.score + 1 })
+  return afterAction({ ...state, piece: moved, progress: state.progress + 1 })
 }
 
 function rotate(state: GameState): GameState {
@@ -422,11 +433,11 @@ function App() {
       s.started && !s.gameOver && !s.flashRows && !s.paused ? fn(s) : s,
     )
 
-  const { board, piece, next, hold, lines, score, scoreKey, level, best } = state
-  const { table, target, reels, stopped, mods, paused, spinning } = state
+  const { board, piece, next, hold, lines, progress, bankroll, scoreKey, level, best } = state
+  const { table, target, reels, stopped, mods, paused, levelEnd, spinning } = state
   const slotCards = reels.map((i) => REEL_CARDS[i])
   const slotOutcome = spinning && stopped >= 3 ? evalThreeCardHand(slotCards) : null
-  const canAfford = score >= SLOT_COST
+  const canAfford = bankroll >= SLOT_COST
   const showPiece = state.started && !state.gameOver && !state.flashRows
   const display = showPiece ? mergePiece(board, piece) : board
   const columns = display[0].length
@@ -544,8 +555,13 @@ function App() {
 
             {paused && (
               <div className="overlay casino">
-                <div className="overlay-kicker">★ CASINÒ ★</div>
+                <div className="overlay-kicker">
+                  {levelEnd ? `★ TAVOLO ${table - 1} SUPERATO ★` : '★ CASINÒ ★'}
+                </div>
                 <div className="slot-title">Slot del Poker</div>
+                <div className="casino-bank">
+                  Bankroll: <b>{bankroll}</b> fiches
+                </div>
 
                 {!spinning ? (
                   <>
@@ -564,11 +580,11 @@ function App() {
                       className="btn ghost-btn"
                       onClick={() => setState(closeCasino)}
                     >
-                      CHIUDI (P)
+                      {levelEnd ? `CONTINUA · TAVOLO ${table}` : 'CHIUDI (P)'}
                     </button>
                     {!canAfford && (
                       <div className="overlay-tip">
-                        Fiches insufficienti ({score})
+                        Bankroll insufficiente ({bankroll})
                       </div>
                     )}
                   </>
@@ -610,7 +626,7 @@ function App() {
                             className="btn ghost-btn"
                             onClick={() => setState(closeCasino)}
                           >
-                            CHIUDI
+                            {levelEnd ? 'CONTINUA' : 'CHIUDI'}
                           </button>
                         </div>
                       </>
@@ -634,8 +650,8 @@ function App() {
                     <span className="over-val gold">{table}</span>
                   </div>
                   <div className="over-stat">
-                    <span className="panel-label">FICHES</span>
-                    <span className="over-val">{score}</span>
+                    <span className="panel-label">BANKROLL</span>
+                    <span className="over-val">{bankroll}</span>
                   </div>
                   <div className="over-stat">
                     <span className="panel-label">RIGHE</span>
@@ -656,17 +672,17 @@ function App() {
             <div className="progress">
               <div
                 className="progress-fill"
-                style={{ width: `${Math.min(100, (score / target) * 100)}%` }}
+                style={{ width: `${Math.min(100, (progress / target) * 100)}%` }}
               />
             </div>
             <div className="progress-text">
-              {score} / {target} fiches
+              {progress} / {target} fiches
             </div>
           </Panel>
 
-          <Panel label="FICHES">
+          <Panel label="BANKROLL">
             <span key={scoreKey} className="big-score">
-              {score}
+              {bankroll}
             </span>
             {mods.mult > 1 && (
               <span className="mult-line">moltiplicatore ×{mods.mult}</span>

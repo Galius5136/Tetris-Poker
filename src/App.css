@@ -436,6 +436,14 @@
   letter-spacing: 0.1em;
 }
 
+.casino-bank {
+  font-size: clamp(13px, 1.8vh, 16px);
+  color: #8fa093;
+}
+.casino-bank b {
+  color: #e3c46a;
+  font-variant-numeric: tabular-nums;
+}
 .slot-result {
   font-size: clamp(13px, 1.9vh, 16px);
   color: #efe9d8;
