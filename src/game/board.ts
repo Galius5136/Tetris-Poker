@@ -7,9 +7,11 @@ export const BOARD_WIDTH = 10
 export const BOARD_HEIGHT = 20
 
 // Una cella piena porta la carta e il tipo di tetromino (per il colore/glow).
+// `anchorUntil` (timestamp): se nel futuro, la riga è bloccata (ANCHOR).
 export interface FilledCell {
   card: Card
   type: TetrominoType
+  anchorUntil?: number
 }
 
 // Una cella è vuota (`null`) oppure piena.

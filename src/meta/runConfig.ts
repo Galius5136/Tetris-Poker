@@ -86,6 +86,7 @@ const IMPLEMENTED_KINDS: ReadonlySet<SpecialKind> = new Set<SpecialKind>([
   'cleaver',
   'bomb',
   'ghost',
+  'anchor',
 ])
 
 // Regole di spawn dei pezzi speciali dai joker equipaggiati.

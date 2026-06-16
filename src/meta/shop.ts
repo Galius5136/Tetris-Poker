@@ -17,7 +17,7 @@ const IMPLEMENTED: ReadonlySet<UpgradeId> = new Set<UpgradeId>([
   'REMOVE_LOW_CARDS', 'DOUBLE_FACE_CARDS', 'SUIT_FOCUS_HEARTS',
   // Cat.2 (pezzi speciali, in arrivo uno alla volta)
   'MIRROR_PIECE', 'HEAVY_PIECE', 'LASER_PIECE', 'COLUMN_CLEAVER', 'BOMB_PIECE',
-  'GHOST_PIECE',
+  'GHOST_PIECE', 'ANCHOR_PIECE',
 ])
 
 // PRNG deterministico (mulberry32): stesso seed → stessa sequenza.

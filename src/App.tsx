@@ -8,7 +8,6 @@ import {
 import './App.css'
 import {
   createEmptyBoard,
-  clearFullRows,
   clearRows,
   clearColumnsFrom,
   clearArea,
@@ -296,11 +295,26 @@ function lockPiece(state: GameState, piece: Piece): GameState {
     return lockPiece({ ...state, board: cleared }, { ...plain, y: plain.y + 1 })
   }
 
-  const merged = mergePiece(state.board, piece)
-  const fullRows = merged.reduce<number[]>(
-    (acc, row, i) => (row.every((cell) => cell !== null) ? [...acc, i] : acc),
-    [],
-  )
+  const now = Date.now()
+  let merged = mergePiece(state.board, piece)
+  // ANCHOR: marca le proprie celle come bloccate per 3 secondi.
+  if (piece.special === 'anchor') {
+    const until = now + 3000
+    const own = new Set(
+      pieceCells(piece).filter((c) => c.y >= 0).map((c) => `${c.y}-${c.x}`),
+    )
+    merged = merged.map((row, y) =>
+      row.map((cell, x) =>
+        cell && own.has(`${y}-${x}`) ? { ...cell, anchorUntil: until } : cell,
+      ),
+    )
+  }
+  // Righe pulibili: piene e NON bloccate da un'ancora ancora attiva.
+  const fullRows = merged.reduce<number[]>((acc, row, i) => {
+    const full = row.every((cell) => cell !== null)
+    const locked = row.some((cell) => cell?.anchorUntil != null && cell.anchorUntil > now)
+    return full && !locked ? [...acc, i] : acc
+  }, [])
   if (fullRows.length === 0) {
     return spawnNext(state, merged)
   }
@@ -357,7 +371,9 @@ function resolveClear(state: GameState): GameState {
   // STREAK_BONUS: pulire 3+ righe arma il +15% per la PROSSIMA mano.
   const streakPending = cfg.streakBonus && rows.length >= 3
 
-  const { board, cleared } = clearFullRows(state.board)
+  // Pulisce esattamente le righe individuate al lock (esclude le ancorate).
+  const board = clearRows(state.board, rows)
+  const cleared = rows.length
   const lines = state.lines + cleared
   const rawProgress = state.progress + gained
   const progress = penalty ? Math.floor(rawProgress * 0.9) : rawProgress
@@ -801,8 +817,12 @@ function App() {
                         specialCells.has(key) && piece.special
                           ? ` special special-${piece.special}`
                           : ''
+                      const locked =
+                        cell.anchorUntil && cell.anchorUntil > Date.now()
+                          ? ' anchored'
+                          : ''
                       return (
-                        <div key={key} className={`cell${flash}${sp}`}>
+                        <div key={key} className={`cell${flash}${sp}${locked}`}>
                           <CardFace card={cell.card} type={cell.type} />
                         </div>
                       )

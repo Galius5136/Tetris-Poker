@@ -71,8 +71,9 @@ export function drawSpec(
   const t = drawType(bag)
   const c = drawCards(deck, template)
   const special = rollSpecial(specialRules)
-  // La bomba è una 2×2 → forza la forma O.
-  const type = special === 'bomb' ? 'O' : t.type
+  // La bomba è una 2×2 (forma O); l'ancora è una barra (forma I).
+  const type =
+    special === 'bomb' ? 'O' : special === 'anchor' ? 'I' : t.type
   return {
     spec: { type, cards: c.cards, special },
     bag: t.bag,
