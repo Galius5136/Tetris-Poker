@@ -1,0 +1,8 @@
+# Normalizza i fine-riga a LF nel repo (niente più warning CRLF su Windows).
+* text=auto eol=lf
+
+# File binari: nessuna conversione.
+*.png binary
+*.jpg binary
+*.svg text eol=lf
+*.ico binary

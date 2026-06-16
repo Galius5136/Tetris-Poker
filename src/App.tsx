@@ -149,22 +149,26 @@ function holdSwap(state: GameState): GameState {
   const width = state.board[0].length
   const current: PieceSpec = { type: state.piece.type, cards: state.piece.cards }
   if (state.hold) {
+    const piece = makePiece(state.hold, width)
     return {
       ...state,
-      piece: makePiece(state.hold, width),
+      piece,
       hold: current,
       canHold: false,
+      gameOver: collides(state.board, piece),
     }
   }
   const drawn = drawSpec(state.bag, state.deck)
+  const piece = makePiece(state.next, width)
   return {
     ...state,
-    piece: makePiece(state.next, width),
+    piece,
     next: drawn.spec,
     bag: drawn.bag,
     deck: drawn.deck,
     hold: current,
     canHold: false,
+    gameOver: collides(state.board, piece),
   }
 }
 
@@ -172,6 +176,10 @@ const HANDLED = [
   'ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp',
   'x', 'X', ' ', 'c', 'C', 'Enter',
 ]
+
+// Tasti che NON devono auto-ripetersi se tenuti premuti (ruota, caduta, hold,
+// start). Movimento sx/dx/giù invece beneficia della ripetizione.
+const NO_REPEAT = new Set(['ArrowUp', 'x', 'X', ' ', 'c', 'C', 'Enter'])
 
 function reduceKey(s: GameState, k: string): GameState {
   if (!s.started) {
@@ -236,6 +244,7 @@ function App() {
     function onKey(e: KeyboardEvent) {
       if (!HANDLED.includes(e.key)) return
       e.preventDefault()
+      if (e.repeat && NO_REPEAT.has(e.key)) return
       setState((s) => reduceKey(s, e.key))
     }
     window.addEventListener('keydown', onKey)
