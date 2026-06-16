@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from 'react'
 import './App.css'
-import { createEmptyBoard, clearFullRows } from './game/board'
+import { createEmptyBoard, clearFullRows, clearRows, clearColumnsFrom } from './game/board'
 import type { Board, FilledCell } from './game/board'
 import { mergePiece, pieceCells } from './game/tetromino'
 import type { Piece, TetrominoType } from './game/tetromino'
@@ -244,6 +244,18 @@ function spawnNext(state: GameState, board: Board): GameState {
 // Blocca il `piece`. Se completa righe, entra in fase di lampeggio (la pulizia
 // e il punteggio avvengono dopo, in resolveClear). Altrimenti spawn immediato.
 function lockPiece(state: GameState, piece: Piece): GameState {
+  // Pezzi che mutano la board al lock, senza scoring poker (Cat.2).
+  if (piece.special === 'laser') {
+    const rows = [...new Set(pieceCells(piece).filter((c) => c.y >= 0).map((c) => c.y))]
+    return spawnNext(state, clearRows(state.board, rows))
+  }
+  if (piece.special === 'cleaver') {
+    const cells = pieceCells(piece).filter((c) => c.y >= 0)
+    const cols = [...new Set(cells.map((c) => c.x))]
+    const fromY = Math.min(...cells.map((c) => c.y)) // dal pezzo in giù
+    return spawnNext(state, clearColumnsFrom(state.board, cols, fromY))
+  }
+
   const merged = mergePiece(state.board, piece)
   const fullRows = merged.reduce<number[]>(
     (acc, row, i) => (row.every((cell) => cell !== null) ? [...acc, i] : acc),

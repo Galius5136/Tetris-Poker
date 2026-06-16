@@ -333,6 +333,29 @@
   color: #ef9a52;
   opacity: 0.9;
 }
+.cell.special-laser {
+  color: #ef7a8e;
+}
+.cell.special-laser .card-face::after {
+  content: '—';
+  position: absolute;
+  top: 1%;
+  right: 8%;
+  font-size: 40cqmin;
+  font-weight: 800;
+  color: #ef7a8e;
+}
+.cell.special-cleaver {
+  color: #6aa3f2;
+}
+.cell.special-cleaver .card-face::after {
+  content: '▾';
+  position: absolute;
+  top: 1%;
+  right: 8%;
+  font-size: 40cqmin;
+  color: #6aa3f2;
+}
 
 .cell.flash .card-face {
   animation: tpCellFlash 0.44s ease both;

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { createEmptyBoard, placeCell, clearFullRows, type Board } from './board'
+import {
+  createEmptyBoard,
+  placeCell,
+  clearFullRows,
+  clearRows,
+  clearColumnsFrom,
+  type Board,
+} from './board'
 import type { FilledCell } from './board'
 
 const fill: FilledCell = { card: { rank: 'A', suit: '♠' }, type: 'O' }
@@ -43,5 +50,26 @@ describe('clearFullRows', () => {
     b[2][0] = fill
     const { cleared } = clearFullRows(b)
     expect(cleared).toBe(0)
+  })
+})
+
+describe('clearRows (LASER)', () => {
+  it('elimina le righe indicate e fa scendere, altezza invariata', () => {
+    const b = createEmptyBoard(3, 3)
+    b[1][0] = fill // metto qualcosa nella riga da pulire
+    const out = clearRows(b, [1])
+    expect(out.length).toBe(3)
+    expect(out.flat().every((c) => c === null)).toBe(true)
+  })
+})
+
+describe('clearColumnsFrom (CLEAVER)', () => {
+  it('svuota la colonna da fromY in giù, lasciando sopra intatto', () => {
+    const b = createEmptyBoard(3, 3)
+    b[0][1] = fill // sopra fromY → resta
+    b[2][1] = fill // sotto → via
+    const out = clearColumnsFrom(b, [1], 1)
+    expect(out[0][1]).toEqual(fill)
+    expect(out[2][1]).toBeNull()
   })
 })

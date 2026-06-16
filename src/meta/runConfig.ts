@@ -80,7 +80,11 @@ const PIECE_JOKER_KIND: Partial<Record<UpgradeId, SpecialKind>> = {
 }
 
 // Solo i tipi speciali già implementati vengono effettivamente spawnati.
-const IMPLEMENTED_KINDS: ReadonlySet<SpecialKind> = new Set<SpecialKind>(['heavy'])
+const IMPLEMENTED_KINDS: ReadonlySet<SpecialKind> = new Set<SpecialKind>([
+  'heavy',
+  'laser',
+  'cleaver',
+])
 
 // Regole di spawn dei pezzi speciali dai joker equipaggiati.
 export function buildSpecials(jokers: JokerId[]): SpecialRule[] {
