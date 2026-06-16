@@ -5,7 +5,8 @@ import { mergePiece, type Piece } from './game/tetromino'
 import { collides, tryMove, tryRotate } from './game/engine'
 import { spawnPiece } from './game/spawn'
 import { shuffledDeck, type Deck } from './game/deck'
-import { isRedSuit } from './game/cards'
+import { isRedSuit, type Card } from './game/cards'
+import { evalRow, HAND_POINTS, type HandResult } from './game/poker'
 
 const TICK_MS = 600
 
@@ -14,19 +15,41 @@ interface GameState {
   piece: Piece // pezzo in caduta
   deck: Deck // carte ancora da pescare
   lines: number // righe completate finora
+  score: number // punti (dalle mani di poker)
+  best: HandResult | null // miglior mano dell'ultimo clear
   gameOver: boolean
 }
 
 function initialState(): GameState {
   const board = createEmptyBoard()
   const { piece, deck } = spawnPiece(shuffledDeck(), board[0].length)
-  return { board, piece, deck, lines: 0, gameOver: false }
+  return { board, piece, deck, lines: 0, score: 0, best: null, gameOver: false }
 }
 
-// Blocca il `piece` dato, elimina le righe piene, pesca un nuovo pezzo.
-// Se il nuovo nasce già in collisione: game over.
+// Confronta due mani: true se a è migliore di b (o b è null).
+function isBetter(a: HandResult, b: HandResult | null): boolean {
+  return !b || a.category > b.category || (a.category === b.category && a.tie > b.tie)
+}
+
+// Blocca il `piece`, valuta le righe piene (poker), le elimina, pesca un nuovo pezzo.
 function lockAndSpawn(state: GameState, piece: Piece): GameState {
   const merged = mergePiece(state.board, piece)
+
+  // Righe piene PRIMA della rimozione, per valutare le mani.
+  const fullRows = merged.filter((row) => row.every((cell) => cell !== null))
+  let best = state.best
+  let gained = 0
+  if (fullRows.length > 0) {
+    let clearBest: HandResult | null = null
+    for (const row of fullRows) {
+      const hand = evalRow(row as Card[])
+      gained += HAND_POINTS[hand.category]
+      if (isBetter(hand, clearBest)) clearBest = hand
+    }
+    if (fullRows.length > 1) gained *= fullRows.length // bonus multi-riga
+    best = clearBest
+  }
+
   const { board, cleared } = clearFullRows(merged)
   const { piece: next, deck } = spawnPiece(state.deck, board[0].length)
   return {
@@ -34,6 +57,8 @@ function lockAndSpawn(state: GameState, piece: Piece): GameState {
     piece: next,
     deck,
     lines: state.lines + cleared,
+    score: state.score + gained,
+    best,
     gameOver: collides(board, next),
   }
 }
@@ -96,7 +121,7 @@ function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const { board, piece, lines, gameOver } = state
+  const { board, piece, lines, score, best, gameOver } = state
   const display = gameOver ? board : mergePiece(board, piece)
   const columns = display[0].length
 
@@ -112,9 +137,15 @@ function App() {
           TETRIS <span className="title-poker">POKER</span>
           <span className="suits">♠♥♦♣</span>
         </h1>
-        <div className="score">
-          <span className="score-label">RIGHE</span>
-          <span className="score-val">{lines}</span>
+        <div className="stats">
+          <div className="stat">
+            <span className="score-label">PUNTI</span>
+            <span className="score-val">{score}</span>
+          </div>
+          <div className="stat">
+            <span className="score-label">RIGHE</span>
+            <span className="score-val lines">{lines}</span>
+          </div>
         </div>
       </header>
 
@@ -154,6 +185,10 @@ function App() {
           </div>
         )}
       </div>
+
+      <p className="hand-readout">
+        {best ? `${best.name} · +${HAND_POINTS[best.category]}` : '—'}
+      </p>
 
       <p className="hint">← → muovi · ↓ giù · ↑ ruota · spazio cade</p>
     </main>

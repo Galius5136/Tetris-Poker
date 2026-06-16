@@ -67,7 +67,12 @@
   vertical-align: 0.25em;
 }
 
-.score {
+.stats {
+  display: flex;
+  gap: 3vw;
+}
+
+.stat {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -87,6 +92,10 @@
   font-size: clamp(28px, 4.4vh, 44px);
   font-variant-numeric: tabular-nums;
   color: #e3c46a;
+}
+
+.score-val.lines {
+  color: #efe9d8;
 }
 
 /* ---- board: cornice + feltro ---- */
@@ -117,7 +126,7 @@
 
 .board {
   --rows: 20;
-  --cell: min(38px, calc((100vh - 170px) / var(--rows)));
+  --cell: min(38px, calc((100vh - 210px) / var(--rows)));
   display: grid;
   gap: calc(var(--cell) * 0.08);
 }
@@ -218,6 +227,17 @@
   font-size: clamp(34px, 6vh, 64px);
   line-height: 0.92;
   color: #efe9d8;
+}
+
+/* ---- readout miglior mano ---- */
+.hand-readout {
+  margin: 0;
+  min-height: 1.2em;
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-weight: 600;
+  font-size: clamp(18px, 2.6vh, 26px);
+  color: #e3c46a;
 }
 
 /* ---- hint comandi ---- */
