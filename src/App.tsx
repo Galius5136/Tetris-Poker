@@ -26,6 +26,8 @@ interface GameState {
   level: number
   best: HandResult | null
   flashRows: number[] | null // righe piene in fase di lampeggio
+  grounded: boolean // il pezzo è appoggiato (lock delay in corso)
+  lockKey: number // bumpato a ogni mossa per resettare il timer di lock
   started: boolean
   gameOver: boolean
 }
@@ -49,9 +51,22 @@ function newGame(started = false): GameState {
     level: START_LEVEL,
     best: null,
     flashRows: null,
+    grounded: false,
+    lockKey: 0,
     started,
     gameOver: false,
   }
+}
+
+const LOCK_DELAY_MS = 500
+
+// Dopo una mossa/rotazione: se il pezzo può ancora scendere non è appoggiato;
+// altrimenti resta appoggiato ma resetta il timer di lock (lockKey++).
+function afterAction(state: GameState): GameState {
+  if (tryMove(state.board, state.piece, 0, 1)) {
+    return { ...state, grounded: false }
+  }
+  return { ...state, grounded: true, lockKey: state.lockKey + 1 }
 }
 
 function isBetter(a: HandResult, b: HandResult | null): boolean {
@@ -70,6 +85,7 @@ function spawnNext(state: GameState, board: Board): GameState {
     bag: drawn.bag,
     deck: drawn.deck,
     canHold: true,
+    grounded: false,
     gameOver: collides(board, piece),
   }
 }
@@ -85,7 +101,7 @@ function lockPiece(state: GameState, piece: Piece): GameState {
   if (fullRows.length === 0) {
     return spawnNext(state, merged)
   }
-  return { ...state, board: merged, flashRows: fullRows, canHold: true }
+  return { ...state, board: merged, flashRows: fullRows, canHold: true, grounded: false }
 }
 
 // Fine del lampeggio: valuta le mani, assegna i punti, elimina le righe, spawn.
@@ -118,26 +134,29 @@ function resolveClear(state: GameState): GameState {
   )
 }
 
+// Tick di gravità: scende di una riga; se non può, segna "appoggiato"
+// (il blocco vero avviene dopo il lock delay, vedi effetto in App).
 function step(state: GameState): GameState {
   if (!state.started || state.gameOver || state.flashRows) return state
   const moved = tryMove(state.board, state.piece, 0, 1)
-  if (moved) return { ...state, piece: moved }
-  return lockPiece(state, state.piece)
+  if (moved) return { ...state, piece: moved, grounded: false }
+  return state.grounded ? state : { ...state, grounded: true }
 }
 
 function move(state: GameState, dx: number, dy: number): GameState {
   const moved = tryMove(state.board, state.piece, dx, dy)
-  return moved ? { ...state, piece: moved } : state
+  return moved ? afterAction({ ...state, piece: moved }) : state
 }
 
 function softDrop(state: GameState): GameState {
   const moved = tryMove(state.board, state.piece, 0, 1)
-  return moved ? { ...state, piece: moved, score: state.score + 1 } : state
+  if (!moved) return afterAction(state)
+  return afterAction({ ...state, piece: moved, score: state.score + 1 })
 }
 
 function rotate(state: GameState): GameState {
   const rotated = tryRotate(state.board, state.piece)
-  return rotated ? { ...state, piece: rotated } : state
+  return rotated ? afterAction({ ...state, piece: rotated }) : state
 }
 
 function hardDrop(state: GameState): GameState {
@@ -155,6 +174,7 @@ function holdSwap(state: GameState): GameState {
       piece,
       hold: current,
       canHold: false,
+      grounded: false,
       gameOver: collides(state.board, piece),
     }
   }
@@ -168,6 +188,7 @@ function holdSwap(state: GameState): GameState {
     deck: drawn.deck,
     hold: current,
     canHold: false,
+    grounded: false,
     gameOver: collides(state.board, piece),
   }
 }
@@ -177,9 +198,10 @@ const HANDLED = [
   'x', 'X', ' ', 'c', 'C', 'Enter',
 ]
 
-// Tasti che NON devono auto-ripetersi se tenuti premuti (ruota, caduta, hold,
-// start). Movimento sx/dx/giù invece beneficia della ripetizione.
-const NO_REPEAT = new Set(['ArrowUp', 'x', 'X', ' ', 'c', 'C', 'Enter'])
+// Movimento con auto-repeat gestito dal gioco (DAS/ARR), non dal SO.
+const DAS_MS = 160 // ritardo prima dell'auto-repeat
+const ARR_MS = 40 // intervallo dell'auto-repeat
+const DIRECTIONS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowDown'])
 
 function reduceKey(s: GameState, k: string): GameState {
   if (!s.started) {
@@ -239,16 +261,58 @@ function App() {
     return () => clearTimeout(id)
   }, [state.flashRows])
 
-  // Tastiera.
+  // Lock delay: quando il pezzo è appoggiato, blocca dopo una breve finestra;
+  // ogni mossa/rotazione resetta il timer (dipendenza da lockKey).
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
+    if (!state.grounded || state.gameOver || state.flashRows) return
+    const id = setTimeout(() => {
+      setState((s) => {
+        if (!s.grounded) return s
+        if (tryMove(s.board, s.piece, 0, 1)) return { ...s, grounded: false }
+        return lockPiece(s, s.piece)
+      })
+    }, LOCK_DELAY_MS)
+    return () => clearTimeout(id)
+  }, [state.grounded, state.lockKey, state.gameOver, state.flashRows])
+
+  // Tastiera: input one-shot + auto-repeat (DAS/ARR) per il movimento.
+  useEffect(() => {
+    let dasTimer: ReturnType<typeof setTimeout> | undefined
+    let arrTimer: ReturnType<typeof setInterval> | undefined
+    let activeKey: string | null = null
+
+    const stopRepeat = () => {
+      if (dasTimer) clearTimeout(dasTimer)
+      if (arrTimer) clearInterval(arrTimer)
+      dasTimer = arrTimer = undefined
+      activeKey = null
+    }
+    const fire = (key: string) => setState((s) => reduceKey(s, key))
+
+    function onDown(e: KeyboardEvent) {
       if (!HANDLED.includes(e.key)) return
       e.preventDefault()
-      if (e.repeat && NO_REPEAT.has(e.key)) return
-      setState((s) => reduceKey(s, e.key))
+      if (e.repeat) return // la ripetizione la gestiamo noi
+      fire(e.key)
+      if (DIRECTIONS.has(e.key)) {
+        stopRepeat()
+        activeKey = e.key
+        dasTimer = setTimeout(() => {
+          arrTimer = setInterval(() => fire(e.key), ARR_MS)
+        }, DAS_MS)
+      }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    function onUp(e: KeyboardEvent) {
+      if (e.key === activeKey) stopRepeat()
+    }
+
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    return () => {
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup', onUp)
+      stopRepeat()
+    }
   }, [])
 
   const start = () => setState(newGame(true))
