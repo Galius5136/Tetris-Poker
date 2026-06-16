@@ -636,6 +636,12 @@
   color: #efe9d8;
 }
 .over-val.gold { color: #e3c46a; }
+.over-meta {
+  font-size: clamp(12px, 1.6vh, 15px);
+  color: #8fa093;
+}
+.over-meta b { color: #e3c46a; }
+.tp-num { font-variant-numeric: tabular-nums; }
 
 .btn {
   margin-top: 0.2vh;
