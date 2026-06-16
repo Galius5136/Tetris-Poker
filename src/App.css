@@ -375,8 +375,78 @@
 }
 .overlay.start { background: rgba(7, 20, 15, 0.72); }
 .overlay.over { background: rgba(5, 14, 10, 0.86); }
-.overlay.payout { background: rgba(7, 20, 15, 0.82); }
+.overlay.payout { background: rgba(7, 20, 15, 0.86); }
 .overlay.payout .overlay-kicker { color: #e3c46a; letter-spacing: 0.2em; }
+
+.slot-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 700;
+  font-size: clamp(22px, 3.4vh, 34px);
+  color: #efe9d8;
+}
+.slot {
+  display: flex;
+  gap: 1.4%;
+  width: min(86%, 460px);
+  padding: 1vh;
+  border-radius: 1.2vh;
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.22);
+}
+.slot-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4vh;
+  padding: 1.2vh 0.4vh;
+  border-radius: 0.9vh;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.12);
+  opacity: 0.55;
+  transition: opacity 0.08s, transform 0.08s;
+}
+.slot-cell.lit {
+  opacity: 1;
+  transform: translateY(-3px);
+  background: linear-gradient(160deg, #1c3c2e, #0d231a);
+  box-shadow:
+    inset 0 0 0 1.4px #e3c46a,
+    0 0 2.4vh rgba(227, 196, 106, 0.45);
+}
+.slot-cell.won {
+  background: linear-gradient(150deg, #fff6d6, #f6e3a4 60%, #eccf78);
+  box-shadow:
+    inset 0 0 0 1.6px #f4e2a6,
+    0 0 3vh rgba(243, 214, 120, 0.7);
+}
+.slot-label {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 700;
+  font-size: clamp(16px, 2.4vh, 22px);
+  color: #e3c46a;
+}
+.slot-cell.won .slot-label { color: #2a1f06; }
+.slot-desc {
+  font-size: 9px;
+  line-height: 1.2;
+  text-align: center;
+  color: #8fa093;
+}
+.slot-cell.won .slot-desc { color: #4a3a12; }
+.slot-result {
+  font-size: clamp(13px, 1.9vh, 16px);
+  color: #efe9d8;
+}
+.slot-result b { color: #e3c46a; }
+
+.mult-line {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #e3c46a;
+}
 .overlay-suits {
   display: flex;
   gap: 1.4vh;
