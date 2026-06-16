@@ -2,8 +2,8 @@
 // toccarlo: il bankroll di fine partita confluisce nel totale, speso poi nello
 // shop. Logica pura + un sottile wrapper sullo storage (iniettabile per i test).
 
-export type UpgradeId = string // tipizzato a fondo nel catalogo (upgrades.ts)
-export type JokerId = string
+import type { UpgradeId, JokerId } from './upgrades'
+export type { UpgradeId, JokerId }
 
 export interface MetaState {
   totalBankroll: number // accumulato tra tutti i run
