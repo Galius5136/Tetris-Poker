@@ -2,7 +2,7 @@
 
 **Fase Change Management:** 14 — Rilascio in produzione
 **Attori:** Sviluppatore, PM (+ AI per monitoraggio)
-**Esito:** ✅ rilascio eseguito — 🟡 smoke test in produzione da confermare
+**Esito:** ✅ rilascio eseguito — ✅ smoke test in produzione superato
 
 > Con il **Go** del CAB e l'autorizzazione del cliente, il change è stato
 > promosso in produzione. Rollback pronto (vedi `piano_ri_rilascio_rollback.md`).
@@ -23,15 +23,15 @@
 
 ## Smoke test in produzione (checklist)
 
-Da eseguire sull'URL di produzione (il deploy `main` di Vercel):
+Eseguito sull'URL di produzione (il deploy `main` di Vercel):
 
-- [ ] L'app si carica senza errori in console.
-- [ ] "Premi per iniziare" → run normale (regressione).
-- [ ] Nickname accetta tutte le lettere (incl. d/x/p/c/m).
-- [ ] Game Over → "Lancia sfida" copia il codice.
-- [ ] Import codice (altro profilo) → riepilogo → Gioca → esito; amico nel pannello.
+- [x] L'app si carica senza errori in console.
+- [x] "Premi per iniziare" → run normale (regressione).
+- [x] Nickname accetta tutte le lettere (incl. d/x/p/c/m).
+- [x] Game Over → "Lancia sfida" copia il codice.
+- [x] Import codice (altro profilo) → riepilogo → Gioca → esito; amico nel pannello.
 
-> Esito smoke test: _(da confermare)_ — alla conferma si chiude la fase 14 e si
+> Esito smoke test: ✅ **superato** (confermato dal cliente). Fase 14 chiusa; si
 > procede con la **fase 15 (post-implementation review)**.
 
 ## Rollback
