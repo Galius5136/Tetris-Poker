@@ -896,12 +896,17 @@ function App() {
     })
   const friends = sortedFriends(meta.friends)
   // Pannello amici riusabile: mostrato sia all'avvio sia a Game Over (RF-12),
-  // così resta raggiungibile anche dopo aver iniziato a giocare.
-  const friendsPanel =
-    friends.length > 0 ? (
-      <div className="friends">
-        <div className="cb-label">Punteggi amici</div>
-        {friends.map((f) => (
+  // così resta raggiungibile anche dopo aver iniziato a giocare. Reso SEMPRE
+  // visibile (con stato vuoto) per non sparire quando non hai ancora amici.
+  const friendsPanel = (
+    <div className="friends">
+      <div className="cb-label">Punteggi amici</div>
+      {friends.length === 0 ? (
+        <div className="friends-empty">
+          Nessun amico ancora — importa il codice sfida di un altro giocatore.
+        </div>
+      ) : (
+        friends.map((f) => (
           <div className="friend-row" key={f.friendCode}>
             <span className="fr-name">{f.nickname}</span>
             <span className="fr-score">
@@ -915,9 +920,10 @@ function App() {
               ×
             </button>
           </div>
-        ))}
-      </div>
-    ) : null
+        ))
+      )}
+    </div>
+  )
 
   // Shop tra un run e l'altro: apri (snapshot della vetrina), compra, gioca.
   const openShop = () => setShopOffers(selectShop(meta))
