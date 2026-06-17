@@ -43,7 +43,20 @@ import { MiniGrid } from './ui/MiniGrid'
 import { loadMeta, saveMeta, bankRun, type MetaState } from './meta/metaGameStore'
 import { selectShop, buyUpgrade, grantRandomJoker } from './meta/shop'
 import { ShopScreen } from './meta/ShopScreen'
-import type { Upgrade, UpgradeId } from './meta/upgrades'
+import type { Upgrade, UpgradeId, JokerId } from './meta/upgrades'
+import {
+  encodeChallenge,
+  decodeChallenge,
+  compareResult,
+  CHALLENGE_VERSION,
+  type ChallengePayload,
+  type Outcome,
+} from './meta/challenge'
+import {
+  upsertFriend,
+  generateFriendCode,
+  sortedFriends,
+} from './meta/friends'
 import {
   buildRunConfig,
   buildSpecials,
@@ -95,6 +108,8 @@ interface GameState {
   doubleDownArmed: boolean // DOUBLE_DOWN: armato per la prossima mano
   lastHandCat: number | null // categoria dell'ultima mano (per il confronto Double Down)
   pendingFreeJoker: boolean // ricompensa Boss da erogare (joker gratis)
+  loadout: JokerId[] // joker usati in questo run (per riprodurre la sfida, CR-004)
+  startBankroll: number // bankroll iniziale del run (replicato nelle sfide, CR-004)
   started: boolean
   gameOver: boolean
 }
@@ -108,6 +123,7 @@ function newGame(
   deckTemplate: Deck = fullDeck(),
   specials: SpecialRule[] = [],
   seed = 1,
+  loadout: JokerId[] = [],
 ): GameState {
   const modifier = modifierForTable(1, seed) // tavolo 1 = Standard
   const board = createEmptyBoard(modifier.boardWidth)
@@ -164,6 +180,8 @@ function newGame(
     doubleDownArmed: false,
     lastHandCat: null,
     pendingFreeJoker: false,
+    loadout,
+    startBankroll,
     started,
     gameOver: false,
   }
@@ -568,6 +586,12 @@ function App() {
   const startedRef = useRef(false)
   // Vetrina dello shop: null = chiuso; array = aperto (snapshot stabile).
   const [shopOffers, setShopOffers] = useState<Upgrade[] | null>(null)
+  // CR-004 — sfida asincrona.
+  const [activeChallenge, setActiveChallenge] = useState<ChallengePayload | null>(
+    null,
+  )
+  const [challengeInput, setChallengeInput] = useState('') // codice incollato dall'utente
+  const [importMsg, setImportMsg] = useState<string | null>(null) // esito import/copia
 
   // A fine run: il valore finale del run (bankroll già da parte + il progresso
   // del tavolo in corso) confluisce nel totale persistente, una sola volta per
@@ -708,25 +732,139 @@ function App() {
     }
   }, [])
 
-  // Avvia un run applicando i joker equipaggiati (config + bankroll iniziale).
-  const startRun = () => {
+  // Costruisce e avvia un run da un loadout esplicito (joker + bankroll + seed).
+  // Condiviso tra run normale e sfida: una sfida fissa loadout/bankroll/seed del
+  // lanciatore, così le condizioni sono identiche (CR-004).
+  const startRunFrom = (
+    jokers: JokerId[],
+    startBankroll: number,
+    seed: number,
+  ) => {
     bankedRef.current = false // nuovo run → il bankroll andrà bancato a fine partita
-    const config = buildRunConfig(meta.activeJokers)
-    const startBankroll = startingBankroll(config, meta.lastRunBankroll)
-    // Cat.4: mazzo-modello del run dalla composizione scelta.
+    const config = buildRunConfig(jokers)
     const deckTemplate = buildDeckTemplate({
       removeLow: config.removeLow,
       doubleFace: config.doubleFace,
       heartFocus: config.heartFocus,
       addJokers: config.addJokers,
     })
-    const specials = buildSpecials(meta.activeJokers) // Cat.2: regole pezzi speciali
-    const seed = randomSeed() // seme del run (modificatori + RNG); fisso nelle sfide (CR-004)
-    setState(newGame(true, config, startBankroll, deckTemplate, specials, seed))
+    const specials = buildSpecials(jokers) // Cat.2: regole pezzi speciali
+    setState(
+      newGame(true, config, startBankroll, deckTemplate, specials, seed, jokers),
+    )
   }
+
+  // Avvia un run normale: joker equipaggiati, bankroll iniziale, seed casuale.
+  const startRun = () => {
+    setActiveChallenge(null)
+    setImportMsg(null)
+    const config = buildRunConfig(meta.activeJokers)
+    startRunFrom(
+      meta.activeJokers,
+      startingBankroll(config, meta.lastRunBankroll),
+      randomSeed(),
+    )
+  }
+
+  // Avvia il run di una sfida: replica esattamente il setup del lanciatore.
+  const startChallenge = (c: ChallengePayload) => {
+    setActiveChallenge(c)
+    startRunFrom(c.jokers, c.bankroll, c.seed)
+  }
+
+  // Accetta un codice incollato: lo decodifica, registra l'amico (ne impari il
+  // punteggio) e avvia il run della sfida. In caso di errore, mostra il motivo.
+  const acceptChallenge = () => {
+    const r = decodeChallenge(challengeInput)
+    if (!r.ok) {
+      const msg =
+        r.error === 'checksum'
+          ? 'Codice corrotto (controlla di averlo copiato per intero).'
+          : r.error === 'version'
+            ? 'Codice di una versione non compatibile.'
+            : 'Codice non valido.'
+      setImportMsg(msg)
+      return
+    }
+    const c = r.payload
+    if (c.code && c.code !== meta.friendCode) {
+      setMeta((m) => {
+        const friends = upsertFriend(m.friends, {
+          friendCode: c.code,
+          nickname: c.by || c.code,
+          bestTable: c.table,
+          fiches: c.fiches,
+          updatedAt: Date.now(),
+        })
+        const next = { ...m, friends }
+        saveMeta(next)
+        return next
+      })
+    }
+    setImportMsg(null)
+    setChallengeInput('')
+    startChallenge(c)
+  }
+
+  // Genera il codice della sfida dal run appena concluso (per condividerlo).
+  const buildChallengeCode = (): string => {
+    let code = meta.friendCode
+    if (!code) {
+      // prima sfida lanciata: assegna un friend code stabile e persistilo
+      code = generateFriendCode()
+      setMeta((m) => {
+        const next = { ...m, friendCode: code }
+        saveMeta(next)
+        return next
+      })
+    }
+    const payload: ChallengePayload = {
+      v: CHALLENGE_VERSION,
+      seed: state.seed,
+      jokers: state.loadout,
+      bankroll: state.startBankroll,
+      table: state.table,
+      fiches: state.bankroll + state.progress,
+      by: meta.nickname || 'Anonimo',
+      code,
+    }
+    return encodeChallenge(payload)
+  }
+
+  // Copia un testo negli appunti (best-effort) e mostra un messaggio.
+  const copyToClipboard = (text: string, ok: string) => {
+    const done = () => setImportMsg(ok)
+    try {
+      navigator.clipboard?.writeText(text).then(done, done)
+    } catch {
+      done()
+    }
+  }
+
+  const launchChallenge = () =>
+    copyToClipboard(buildChallengeCode(), 'Codice sfida copiato negli appunti!')
+
+  // Esito della sfida in corso, calcolato a fine partita (null se non in sfida).
+  const challengeOutcome: Outcome | null =
+    activeChallenge && state.gameOver
+      ? compareResult(
+          activeChallenge,
+          state.table,
+          state.bankroll + state.progress,
+        )
+      : null
   // Ref aggiornati a ogni render, per l'handler tastiera (deps []).
   startRef.current = startRun
   startedRef.current = state.started
+
+  // CR-004: aggiorna il nickname locale (persistito), max 16 caratteri.
+  const setNickname = (name: string) =>
+    setMeta((m) => {
+      const next = { ...m, nickname: name.slice(0, 16) }
+      saveMeta(next)
+      return next
+    })
+  const friends = sortedFriends(meta.friends)
 
   // Shop tra un run e l'altro: apri (snapshot della vetrina), compra, gioca.
   const openShop = () => setShopOffers(selectShop(meta))
@@ -888,6 +1026,54 @@ function App() {
                 </button>
                 <div className="overlay-tip">
                   o premi <b>Invio</b>
+                </div>
+
+                {/* CR-004 — identità + sfida asincrona */}
+                <div className="challenge-box">
+                  <label className="cb-label">Nickname</label>
+                  <input
+                    className="cb-input"
+                    value={meta.nickname}
+                    maxLength={16}
+                    placeholder="Il tuo nome"
+                    onChange={(e) => setNickname(e.target.value)}
+                  />
+                  {meta.friendCode && (
+                    <div className="cb-code">
+                      Codice amico: <b>{meta.friendCode}</b>
+                    </div>
+                  )}
+
+                  <label className="cb-label">Accetta una sfida</label>
+                  <textarea
+                    className="cb-input cb-area"
+                    rows={2}
+                    value={challengeInput}
+                    placeholder="Incolla qui il codice sfida…"
+                    onChange={(e) => setChallengeInput(e.target.value)}
+                  />
+                  <button
+                    className="btn btn-sm"
+                    disabled={!challengeInput.trim()}
+                    onClick={acceptChallenge}
+                  >
+                    ACCETTA SFIDA
+                  </button>
+                  {importMsg && <div className="cb-msg">{importMsg}</div>}
+
+                  {friends.length > 0 && (
+                    <div className="friends">
+                      <div className="cb-label">Punteggi amici</div>
+                      {friends.map((f) => (
+                        <div className="friend-row" key={f.friendCode}>
+                          <span className="fr-name">{f.nickname}</span>
+                          <span className="fr-score">
+                            Tavolo {f.bestTable} · {f.fiches}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1063,13 +1249,34 @@ function App() {
                     <span className="over-val">{lines}</span>
                   </div>
                 </div>
+                {challengeOutcome && (
+                  <div className={`challenge-result cr-${challengeOutcome}`}>
+                    <b>
+                      {challengeOutcome === 'win'
+                        ? `Hai battuto ${activeChallenge?.by}!`
+                        : challengeOutcome === 'lose'
+                          ? `${activeChallenge?.by} resta avanti`
+                          : 'Pareggio!'}
+                    </b>
+                    <span className="cr-detail">
+                      Sfida: tavolo {activeChallenge?.table} ·{' '}
+                      {activeChallenge?.fiches} fiches
+                    </span>
+                  </div>
+                )}
                 <div className="over-meta">
                   Bankroll totale:{' '}
                   <b className="tp-num">{meta.totalBankroll}</b>
                 </div>
-                <button className="btn" onClick={openShop}>
-                  SHOP →
-                </button>
+                <div className="over-actions">
+                  <button className="btn" onClick={openShop}>
+                    SHOP →
+                  </button>
+                  <button className="btn btn-ghost" onClick={launchChallenge}>
+                    {activeChallenge ? 'RILANCIA' : 'LANCIA SFIDA'}
+                  </button>
+                </div>
+                {importMsg && <div className="cb-msg">{importMsg}</div>}
               </div>
             )}
           </div>

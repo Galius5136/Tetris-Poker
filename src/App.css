@@ -1008,6 +1008,82 @@
 .shop-card.cat-poker { border-top: 3px solid #46c98b; }
 .shop-card.cat-deck { border-top: 3px solid #6aa3f2; }
 
+/* ---- CR-004: sfida asincrona ---- */
+.challenge-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5vh;
+  width: min(86%, 320px);
+  margin-top: 1.4vh;
+  padding-top: 1.4vh;
+  border-top: 1px solid rgba(212, 175, 55, 0.22);
+  text-align: left;
+}
+.cb-label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8fa093;
+  margin-top: 0.4vh;
+}
+.cb-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.8vh 1ch;
+  border-radius: 8px;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.22);
+  color: #efe9d8;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+}
+.cb-input::placeholder { color: #6f7d72; }
+.cb-input:focus { outline: none; box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.55); }
+.cb-area { resize: none; }
+.cb-code { font-size: 11px; color: #8fa093; }
+.cb-code b { color: #e3c46a; letter-spacing: 0.1em; }
+.cb-msg { font-size: 11px; color: #e3c46a; text-align: center; }
+.btn.btn-sm { padding: 0.7vh 1.6vh; font-size: 12px; }
+.btn.btn-ghost {
+  color: #efe9d8;
+  background: linear-gradient(165deg, rgba(22, 52, 41, 0.95), rgba(12, 33, 25, 0.95));
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.32);
+}
+
+.friends {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3vh;
+  margin-top: 0.6vh;
+}
+.friend-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1ch;
+  padding: 0.5vh 1ch;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+}
+.fr-name { color: #efe9d8; font-weight: 700; }
+.fr-score { color: #8fa093; font-variant-numeric: tabular-nums; }
+
+.over-actions { display: flex; gap: 1ch; justify-content: center; flex-wrap: wrap; }
+.challenge-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2vh;
+  padding: 1vh 1.6vh;
+  border-radius: 1vh;
+  text-align: center;
+  font-size: 14px;
+}
+.challenge-result .cr-detail { font-size: 11px; color: #8fa093; }
+.cr-win { background: rgba(106, 163, 80, 0.18); box-shadow: inset 0 0 0 1px rgba(120, 200, 90, 0.4); }
+.cr-lose { background: rgba(239, 90, 90, 0.14); box-shadow: inset 0 0 0 1px rgba(239, 90, 90, 0.4); }
+.cr-tie { background: rgba(255, 255, 255, 0.05); box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.3); }
+
 /* ---- responsive: impila su schermi stretti ---- */
 @media (max-width: 880px) {
   .shell { flex-direction: column; align-items: center; gap: 1.4vh; }
