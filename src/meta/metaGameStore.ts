@@ -3,6 +3,7 @@
 // shop. Logica pura + un sottile wrapper sullo storage (iniettabile per i test).
 
 import type { UpgradeId, JokerId } from './upgrades'
+import type { FriendEntry } from './friends'
 export type { UpgradeId, JokerId }
 
 export interface MetaState {
@@ -12,6 +13,9 @@ export interface MetaState {
   shopSeed: number // rotazione deterministica dello shop
   runsPlayed: number // run completati (guida la rotazione ogni 3)
   lastRunBankroll: number // valore finale dell'ultimo run (per Compound Interest)
+  nickname: string // CR-004: identità locale del giocatore
+  friendCode: string // CR-004: codice amico stabile
+  friends: FriendEntry[] // CR-004: punteggi degli amici (import locali)
 }
 
 export const MAX_ACTIVE_JOKERS = 5
@@ -23,6 +27,9 @@ export const INITIAL_META: MetaState = {
   shopSeed: 1,
   runsPlayed: 0,
   lastRunBankroll: 0,
+  nickname: '',
+  friendCode: '',
+  friends: [],
 }
 
 const STORAGE_KEY = 'tetris-poker:meta:v1'
