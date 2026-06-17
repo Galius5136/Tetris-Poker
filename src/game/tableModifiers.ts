@@ -132,10 +132,19 @@ const BLIND_POOL: TableModifierId[] = [
 ]
 const BOSS_POOL: TableModifierId[] = ['THE_HOUSE', 'COLD_DECK']
 
-// Indice deterministico (seed + tavolo) — niente stato, riproducibile.
+// Hash intero deterministico ben mescolato (seed + tavolo): tavoli consecutivi
+// danno risultati diversi anche con seed piccoli.
+function hashi(seed: number, table: number): number {
+  let h = Math.imul(seed ^ 0x9e3779b9, 2654435761)
+  h = Math.imul(h ^ (table + 1), 0x85ebca6b)
+  h ^= h >>> 13
+  h = Math.imul(h, 0xc2b2ae35)
+  h ^= h >>> 16
+  return Math.abs(h | 0)
+}
+
 function pick(pool: TableModifierId[], seed: number, table: number): TableModifier {
-  const h = Math.abs(Math.imul(seed ^ (table * 2654435761), 40503))
-  return TABLE_MODIFIERS[pool[h % pool.length]]
+  return TABLE_MODIFIERS[pool[hashi(seed, table) % pool.length]]
 }
 
 // Modificatore del tavolo `table` (1-based) per un dato seed di run.

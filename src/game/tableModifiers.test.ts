@@ -35,6 +35,11 @@ describe('modifierForTable', () => {
     expect(modifierForTable(4, 42).id).toBe(modifierForTable(4, 42).id)
   })
 
+  it('tavoli consecutivi variano (no run di modificatori identici)', () => {
+    const ids = [2, 3, 4].map((t) => modifierForTable(t, 1).id)
+    expect(new Set(ids).size).toBeGreaterThan(1)
+  })
+
   it('seed diversi possono dare modificatori diversi', () => {
     const ids = new Set(
       [1, 2, 3, 4, 5, 6, 7, 8].flatMap((s) =>
