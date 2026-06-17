@@ -853,9 +853,11 @@ function App() {
           state.bankroll + state.progress,
         )
       : null
-  // Ref aggiornati a ogni render, per l'handler tastiera (deps []).
-  startRef.current = startRun
-  startedRef.current = state.started
+  // Ref aggiornati dopo ogni render, per l'handler tastiera (deps []).
+  useEffect(() => {
+    startRef.current = startRun
+    startedRef.current = state.started
+  })
 
   // CR-004: aggiorna il nickname locale (persistito), max 16 caratteri.
   const setNickname = (name: string) =>
