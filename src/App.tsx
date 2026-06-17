@@ -43,6 +43,7 @@ import { MiniGrid } from './ui/MiniGrid'
 import { loadMeta, saveMeta, bankRun, type MetaState } from './meta/metaGameStore'
 import { selectShop, buyUpgrade, grantRandomJoker } from './meta/shop'
 import { ShopScreen } from './meta/ShopScreen'
+import { UPGRADES } from './meta/upgrades'
 import type { Upgrade, UpgradeId, JokerId } from './meta/upgrades'
 import {
   encodeChallenge,
@@ -54,6 +55,7 @@ import {
 } from './meta/challenge'
 import {
   upsertFriend,
+  removeFriend,
   generateFriendCode,
   sortedFriends,
 } from './meta/friends'
@@ -592,6 +594,9 @@ function App() {
   )
   const [challengeInput, setChallengeInput] = useState('') // codice incollato dall'utente
   const [importMsg, setImportMsg] = useState<string | null>(null) // esito import/copia
+  const [pendingChallenge, setPendingChallenge] = useState<ChallengePayload | null>(
+    null,
+  ) // sfida decodificata in attesa del riepilogo (RF-7)
 
   // A fine run: il valore finale del run (bankroll già da parte + il progresso
   // del tavolo in corso) confluisce nel totale persistente, una sola volta per
@@ -772,16 +777,17 @@ function App() {
     startRunFrom(c.jokers, c.bankroll, c.seed)
   }
 
-  // Accetta un codice incollato: lo decodifica, registra l'amico (ne impari il
-  // punteggio) e avvia il run della sfida. In caso di errore, mostra il motivo.
-  const acceptChallenge = () => {
+  // Passo 1 (RF-6/7/11): decodifica il codice incollato, registra l'amico (ne
+  // impari il punteggio) e mostra il riepilogo della sfida. In caso di errore,
+  // mostra il motivo senza avviare nulla.
+  const previewChallenge = () => {
     const r = decodeChallenge(challengeInput)
     if (!r.ok) {
       const msg =
         r.error === 'checksum'
           ? 'Codice corrotto (controlla di averlo copiato per intero).'
           : r.error === 'version'
-            ? 'Codice di una versione non compatibile.'
+            ? 'Sfida non compatibile con questa versione.'
             : 'Codice non valido.'
       setImportMsg(msg)
       return
@@ -801,10 +807,27 @@ function App() {
         return next
       })
     }
-    setImportMsg(null)
+    setImportMsg(c.code === meta.friendCode ? '(È la tua stessa sfida.)' : null)
     setChallengeInput('')
+    setPendingChallenge(c)
+  }
+
+  // Passo 2 (RF-8): avvia il run della sfida dal riepilogo.
+  const playPendingChallenge = () => {
+    if (!pendingChallenge) return
+    const c = pendingChallenge
+    setPendingChallenge(null)
+    setImportMsg(null)
     startChallenge(c)
   }
+
+  // RF-13: rimuove un amico dalla lista locale.
+  const removeFriendById = (friendCode: string) =>
+    setMeta((m) => {
+      const next = { ...m, friends: removeFriend(m.friends, friendCode) }
+      saveMeta(next)
+      return next
+    })
 
   // Genera il codice della sfida dal run appena concluso (per condividerlo).
   const buildChallengeCode = (): string => {
@@ -1046,22 +1069,56 @@ function App() {
                     </div>
                   )}
 
-                  <label className="cb-label">Accetta una sfida</label>
-                  <textarea
-                    className="cb-input cb-area"
-                    rows={2}
-                    value={challengeInput}
-                    placeholder="Incolla qui il codice sfida…"
-                    onChange={(e) => setChallengeInput(e.target.value)}
-                  />
-                  <button
-                    className="btn btn-sm"
-                    disabled={!challengeInput.trim()}
-                    onClick={acceptChallenge}
-                  >
-                    ACCETTA SFIDA
-                  </button>
-                  {importMsg && <div className="cb-msg">{importMsg}</div>}
+                  {pendingChallenge ? (
+                    /* RF-7: riepilogo della sfida prima di giocare */
+                    <div className="challenge-summary">
+                      <div className="cb-label">Sfida ricevuta</div>
+                      <div className="cs-headline">
+                        Sfida di <b>{pendingChallenge.by}</b> — arrivato al{' '}
+                        <b>Tavolo {pendingChallenge.table}</b>
+                      </div>
+                      {pendingChallenge.jokers.length > 0 && (
+                        <div className="cs-jokers">
+                          Potenziamenti:{' '}
+                          {pendingChallenge.jokers
+                            .map((id) => UPGRADES[id]?.name)
+                            .filter(Boolean)
+                            .join(', ')}
+                        </div>
+                      )}
+                      {importMsg && <div className="cb-msg">{importMsg}</div>}
+                      <div className="over-actions">
+                        <button className="btn btn-sm" onClick={playPendingChallenge}>
+                          GIOCA
+                        </button>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => setPendingChallenge(null)}
+                        >
+                          ANNULLA
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <label className="cb-label">Accetta una sfida</label>
+                      <textarea
+                        className="cb-input cb-area"
+                        rows={2}
+                        value={challengeInput}
+                        placeholder="Incolla qui il codice sfida…"
+                        onChange={(e) => setChallengeInput(e.target.value)}
+                      />
+                      <button
+                        className="btn btn-sm"
+                        disabled={!challengeInput.trim()}
+                        onClick={previewChallenge}
+                      >
+                        ACCETTA SFIDA
+                      </button>
+                      {importMsg && <div className="cb-msg">{importMsg}</div>}
+                    </>
+                  )}
 
                   {friends.length > 0 && (
                     <div className="friends">
@@ -1072,6 +1129,13 @@ function App() {
                           <span className="fr-score">
                             Tavolo {f.bestTable} · {f.fiches}
                           </span>
+                          <button
+                            className="fr-remove"
+                            title="Rimuovi amico"
+                            onClick={() => removeFriendById(f.friendCode)}
+                          >
+                            ×
+                          </button>
                         </div>
                       ))}
                     </div>
