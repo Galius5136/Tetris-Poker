@@ -17,7 +17,7 @@
 
 Oggi il gioco gira **interamente sul dispositivo di ciascun giocatore** (nel suo
 browser). Non esiste un "posto comune" dove finiscono i risultati: ogni partita
-resta sul telefono/PC di chi l'ha giocata.
+resta sul PC di chi l'ha giocata.
 
 Conseguenza diretta: **un giocatore non può vedere il risultato di un altro**,
 perché i due dispositivi non si parlano. Per realizzare la sfida ("uno gioca e
