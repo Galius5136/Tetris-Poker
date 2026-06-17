@@ -895,6 +895,29 @@ function App() {
       return next
     })
   const friends = sortedFriends(meta.friends)
+  // Pannello amici riusabile: mostrato sia all'avvio sia a Game Over (RF-12),
+  // così resta raggiungibile anche dopo aver iniziato a giocare.
+  const friendsPanel =
+    friends.length > 0 ? (
+      <div className="friends">
+        <div className="cb-label">Punteggi amici</div>
+        {friends.map((f) => (
+          <div className="friend-row" key={f.friendCode}>
+            <span className="fr-name">{f.nickname}</span>
+            <span className="fr-score">
+              Tavolo {f.bestTable} · {f.fiches}
+            </span>
+            <button
+              className="fr-remove"
+              title="Rimuovi amico"
+              onClick={() => removeFriendById(f.friendCode)}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    ) : null
 
   // Shop tra un run e l'altro: apri (snapshot della vetrina), compra, gioca.
   const openShop = () => setShopOffers(selectShop(meta))
@@ -1125,26 +1148,7 @@ function App() {
                     </>
                   )}
 
-                  {friends.length > 0 && (
-                    <div className="friends">
-                      <div className="cb-label">Punteggi amici</div>
-                      {friends.map((f) => (
-                        <div className="friend-row" key={f.friendCode}>
-                          <span className="fr-name">{f.nickname}</span>
-                          <span className="fr-score">
-                            Tavolo {f.bestTable} · {f.fiches}
-                          </span>
-                          <button
-                            className="fr-remove"
-                            title="Rimuovi amico"
-                            onClick={() => removeFriendById(f.friendCode)}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {friendsPanel}
                 </div>
               </div>
             )}
@@ -1348,6 +1352,7 @@ function App() {
                   </button>
                 </div>
                 {importMsg && <div className="cb-msg">{importMsg}</div>}
+                {friendsPanel}
               </div>
             )}
           </div>
