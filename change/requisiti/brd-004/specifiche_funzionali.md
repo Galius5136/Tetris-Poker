@@ -61,6 +61,9 @@ più, l'interfaccia mostra **i punteggi degli amici**.
   principale) **e** come **codice testuale** copiabile (fallback, per i canali
   che rimuovono i link). Il giocatore copia e invia con qualunque mezzo esterno
   (chat, email…). *Nessun invio avviene dall'app.* (vedi DI-3)
+  > **Stato implementazione (v1):** realizzato il **codice testuale** (copia negli
+  > appunti); il **link "apri e gioca"** è **rimandato a una CR futura** —
+  > deviazione giustificata in `test-report.md` §4 (scope v1 concordato).
 
 ### Accettazione di una sfida
 - **RF-6** — Dalla schermata iniziale, il giocatore può **incollare un codice
