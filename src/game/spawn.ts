@@ -1,5 +1,6 @@
-// Generazione dei pezzi — la randomizzazione (7-bag + pesca carte) è IMPURA
-// (Math.random via shuffle) e tenuta isolata qui.
+// Generazione dei pezzi. La casualità è DETERMINISTICA: tutto deriva da un RNG
+// seminato, threaded come stato intero `rng` (vedi rng.ts) → un run è
+// riproducibile da un seed (CR-004).
 
 import {
   SHAPES,
@@ -8,7 +9,8 @@ import {
   type SpecialKind,
 } from './tetromino'
 import { WILD_CARD, type Card } from './cards'
-import { shuffle, fullDeck, type Deck } from './deck'
+import { fullDeck, type Deck } from './deck'
+import { nextFloat, shuffleArr } from './rng'
 
 const ALL_TYPES = Object.keys(SHAPES) as TetrominoType[]
 const CELLS_PER_PIECE = 4
@@ -26,38 +28,57 @@ export interface SpecialRule {
   rarity: number
 }
 
-// Decide se il prossimo pezzo è speciale (IMPURO). La prima regola che "scatta" vince.
-export function rollSpecial(rules: SpecialRule[]): SpecialKind | null {
-  for (const r of rules) {
-    if (Math.random() < 1 / r.rarity) return r.kind
+// Decide se il prossimo pezzo è speciale. La prima regola che "scatta" vince.
+export function rollSpecial(
+  rules: SpecialRule[],
+  rng: number,
+): { kind: SpecialKind | null; rng: number } {
+  let r = rng
+  for (const rule of rules) {
+    const [v, r2] = nextFloat(r)
+    r = r2
+    if (v < 1 / rule.rarity) return { kind: rule.kind, rng: r }
   }
-  return null
+  return { kind: null, rng: r }
 }
 
-// 7-bag: estrae un tipo dal sacchetto; se vuoto, lo riempie mescolando i 7.
-export function drawType(bag: TetrominoType[]): {
-  type: TetrominoType
-  bag: TetrominoType[]
-} {
-  const b = bag.length > 0 ? bag : shuffle(ALL_TYPES)
-  return { type: b[0], bag: b.slice(1) }
+// 7-bag: estrae un tipo dal sacchetto; se vuoto, lo riempie mescolando (rng).
+export function drawType(
+  bag: TetrominoType[],
+  rng: number,
+): { type: TetrominoType; bag: TetrominoType[]; rng: number } {
+  if (bag.length > 0) return { type: bag[0], bag: bag.slice(1), rng }
+  const [shuffled, rng2] = shuffleArr(rng, ALL_TYPES)
+  return { type: shuffled[0], bag: shuffled.slice(1), rng: rng2 }
 }
 
-// Garantisce almeno n carte, rabboccando con il mazzo-modello del run mescolato.
-function ensure(deck: Deck, n: number, template: Deck): Deck {
+// Garantisce almeno n carte, rabboccando col mazzo-modello mescolato (rng).
+function ensure(
+  deck: Deck,
+  n: number,
+  template: Deck,
+  rng: number,
+): { deck: Deck; rng: number } {
   let d = deck
-  while (d.length < n) d = [...d, ...shuffle(template)]
-  return d
+  let r = rng
+  while (d.length < n) {
+    const [s, r2] = shuffleArr(r, template)
+    d = [...d, ...s]
+    r = r2
+  }
+  return { deck: d, rng: r }
 }
 
 export function drawCards(
   deck: Deck,
-  template: Deck = fullDeck(),
-): { cards: [Card, Card, Card, Card]; deck: Deck } {
-  const d = ensure(deck, CELLS_PER_PIECE, template)
+  template: Deck,
+  rng: number,
+): { cards: [Card, Card, Card, Card]; deck: Deck; rng: number } {
+  const e = ensure(deck, CELLS_PER_PIECE, template, rng)
   return {
-    cards: d.slice(0, CELLS_PER_PIECE) as [Card, Card, Card, Card],
-    deck: d.slice(CELLS_PER_PIECE),
+    cards: e.deck.slice(0, CELLS_PER_PIECE) as [Card, Card, Card, Card],
+    deck: e.deck.slice(CELLS_PER_PIECE),
+    rng: e.rng,
   }
 }
 
@@ -67,13 +88,14 @@ export function drawSpec(
   deck: Deck,
   template: Deck = fullDeck(),
   specialRules: SpecialRule[] = [],
-): { spec: PieceSpec; bag: TetrominoType[]; deck: Deck } {
-  const t = drawType(bag)
-  const c = drawCards(deck, template)
-  const special = rollSpecial(specialRules)
+  rng = 0,
+): { spec: PieceSpec; bag: TetrominoType[]; deck: Deck; rng: number } {
+  const t = drawType(bag, rng)
+  const c = drawCards(deck, template, t.rng)
+  const s = rollSpecial(specialRules, c.rng)
+  const special = s.kind
   // La bomba è una 2×2 (forma O); l'ancora è una barra (forma I).
-  const type =
-    special === 'bomb' ? 'O' : special === 'anchor' ? 'I' : t.type
+  const type = special === 'bomb' ? 'O' : special === 'anchor' ? 'I' : t.type
   // WILD: una delle 4 carte del pezzo diventa un jolly.
   const cards: [Card, Card, Card, Card] =
     special === 'wild'
@@ -83,6 +105,7 @@ export function drawSpec(
     spec: { type, cards, special },
     bag: t.bag,
     deck: c.deck,
+    rng: s.rng,
   }
 }
 

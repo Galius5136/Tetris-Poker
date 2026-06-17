@@ -19,7 +19,8 @@ import { mergePiece, pieceCells } from './game/tetromino'
 import type { Piece, TetrominoType, SpecialKind } from './game/tetromino'
 import { collides, tryMove, tryRotate, tryMirror, dropPosition } from './game/engine'
 import { drawSpec, makePiece, type PieceSpec, type SpecialRule } from './game/spawn'
-import { shuffle, fullDeck, buildDeckTemplate, type Deck } from './game/deck'
+import { fullDeck, buildDeckTemplate, type Deck } from './game/deck'
+import { randInt, randomSeed } from './game/rng'
 import { evalRow, HAND_POINTS, type HandResult } from './game/poker'
 import { SUITS, type Suit } from './game/cards'
 import { levelFromLines, tickMs, START_LEVEL } from './game/levels'
@@ -72,7 +73,8 @@ interface GameState {
   lockKey: number // bumpato a ogni mossa per resettare il timer di lock
   table: number // tavolo corrente del run
   target: number // fiches necessarie per superare il tavolo
-  seed: number // seed del run (selezione deterministica dei modificatori)
+  seed: number // seed del run (modificatori + RNG: rende il run riproducibile)
+  rngState: number // stato del PRNG del run (threaded, deterministico)
   modifier: TableModifier // modificatore del tavolo corrente (Blind/Boss)
   paused: boolean // Casinò aperto (gioco in pausa)
   levelEnd: boolean // pausa obbligatoria di fine tavolo (minigiochi abilitati)
@@ -103,7 +105,6 @@ function newGame(
   started = false,
   config: RunConfig = NEUTRAL_CONFIG,
   startBankroll = 0,
-  wildSuit: Suit | null = null,
   deckTemplate: Deck = fullDeck(),
   specials: SpecialRule[] = [],
   seed = 1,
@@ -111,8 +112,17 @@ function newGame(
   const modifier = modifierForTable(1, seed) // tavolo 1 = Standard
   const board = createEmptyBoard(modifier.boardWidth)
   const width = board[0].length
-  const first = drawSpec([], shuffle(deckTemplate), deckTemplate, specials)
-  const second = drawSpec(first.bag, first.deck, deckTemplate, specials)
+  // Tutta la casualità del run deriva dal seed (deterministico/riproducibile).
+  let rng = seed >>> 0
+  // FLUSH_WILD_SUIT: seme jolly scelto dallo stesso stream (se attivo).
+  let wildSuit: Suit | null = null
+  if (config.flushWild) {
+    const [i, r] = randInt(rng, SUITS.length)
+    rng = r
+    wildSuit = SUITS[i]
+  }
+  const first = drawSpec([], [], deckTemplate, specials, rng)
+  const second = drawSpec(first.bag, first.deck, deckTemplate, specials, first.rng)
   return {
     board,
     piece: makePiece(first.spec, width),
@@ -133,6 +143,7 @@ function newGame(
     table: 1,
     target: Math.round(tableTarget(1) * modifier.targetMult),
     seed,
+    rngState: second.rng,
     modifier,
     paused: false,
     levelEnd: false,
@@ -246,7 +257,13 @@ function isBetter(a: HandResult, b: HandResult | null): boolean {
 // Genera il prossimo pezzo da next/bag/deck su una board data.
 function spawnNext(state: GameState, board: Board): GameState {
   const piece = makePiece(state.next, board[0].length)
-  const drawn = drawSpec(state.bag, state.deck, state.deckTemplate, state.specials)
+  const drawn = drawSpec(
+    state.bag,
+    state.deck,
+    state.deckTemplate,
+    state.specials,
+    state.rngState,
+  )
   return {
     ...state,
     board,
@@ -254,6 +271,7 @@ function spawnNext(state: GameState, board: Board): GameState {
     next: drawn.spec,
     bag: drawn.bag,
     deck: drawn.deck,
+    rngState: drawn.rng,
     canHold: true,
     grounded: false,
     gameOver: collides(board, piece),
@@ -451,7 +469,13 @@ function holdSwap(state: GameState): GameState {
       gameOver: collides(state.board, piece),
     }
   }
-  const drawn = drawSpec(state.bag, state.deck, state.deckTemplate, state.specials)
+  const drawn = drawSpec(
+    state.bag,
+    state.deck,
+    state.deckTemplate,
+    state.specials,
+    state.rngState,
+  )
   const piece = makePiece(state.next, width)
   return {
     ...state,
@@ -459,6 +483,7 @@ function holdSwap(state: GameState): GameState {
     next: drawn.spec,
     bag: drawn.bag,
     deck: drawn.deck,
+    rngState: drawn.rng,
     hold: current,
     canHold: false,
     grounded: false,
@@ -688,10 +713,6 @@ function App() {
     bankedRef.current = false // nuovo run → il bankroll andrà bancato a fine partita
     const config = buildRunConfig(meta.activeJokers)
     const startBankroll = startingBankroll(config, meta.lastRunBankroll)
-    // FLUSH_WILD_SUIT: scegli un seme jolly per questo run.
-    const wildSuit = config.flushWild
-      ? SUITS[Math.floor(Math.random() * SUITS.length)]
-      : null
     // Cat.4: mazzo-modello del run dalla composizione scelta.
     const deckTemplate = buildDeckTemplate({
       removeLow: config.removeLow,
@@ -700,9 +721,8 @@ function App() {
       addJokers: config.addJokers,
     })
     const specials = buildSpecials(meta.activeJokers) // Cat.2: regole pezzi speciali
-    setState(
-      newGame(true, config, startBankroll, wildSuit, deckTemplate, specials, meta.shopSeed),
-    )
+    const seed = randomSeed() // seme del run (modificatori + RNG); fisso nelle sfide (CR-004)
+    setState(newGame(true, config, startBankroll, deckTemplate, specials, seed))
   }
   // Ref aggiornati a ogni render, per l'handler tastiera (deps []).
   startRef.current = startRun

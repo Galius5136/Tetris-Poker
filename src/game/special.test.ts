@@ -28,9 +28,9 @@ describe('tryMirror', () => {
 
 describe('rollSpecial', () => {
   it('senza regole non assegna nulla', () => {
-    expect(rollSpecial([])).toBeNull()
+    expect(rollSpecial([], 1).kind).toBeNull()
   })
   it('con rarità 1 assegna sempre il tipo', () => {
-    expect(rollSpecial([{ kind: 'heavy', rarity: 1 }])).toBe('heavy')
+    expect(rollSpecial([{ kind: 'heavy', rarity: 1 }], 1).kind).toBe('heavy')
   })
 })
