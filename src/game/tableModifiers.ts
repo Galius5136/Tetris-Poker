@@ -88,8 +88,8 @@ export const TABLE_MODIFIERS: Record<TableModifierId, TableModifier> = {
     name: 'Tavolo di Colore',
     desc: 'Solo le mani di colore pagano.',
     kind: 'blind',
-    targetMult: 0.8,
-    reward: { fiches: 180 },
+    targetMult: 0.65, // i colori sono rari: target più basso
+    reward: { fiches: 220 },
     scoreOnly: [6, 9],
   },
   HIGH_STAKES: {
@@ -103,21 +103,21 @@ export const TABLE_MODIFIERS: Record<TableModifierId, TableModifier> = {
   THE_HOUSE: {
     id: 'THE_HOUSE',
     name: 'Il Banco',
-    desc: 'Target +100% e velocità ×1.5.',
+    desc: 'Target +70% e velocità ×1.5.',
     kind: 'boss',
-    targetMult: 2,
+    targetMult: 1.7, // ×2 + velocità ×1.5 era troppo combinato
     reward: { fiches: 400, freeJoker: true },
     startSpeedMult: 1.5,
   },
   COLD_DECK: {
     id: 'COLD_DECK',
     name: 'Mazzo Freddo',
-    desc: 'Solo Tris o meglio pagano; board a 9 colonne.',
+    desc: 'Solo doppia coppia o meglio pagano; board a 9 colonne.',
     kind: 'boss',
-    targetMult: 1.8,
+    targetMult: 1.5,
     reward: { fiches: 350, freeJoker: true },
     boardWidth: 9,
-    scoreOnly: [4, 5, 6, 7, 8, 9, 10],
+    scoreOnly: [3, 4, 5, 6, 7, 8, 9, 10], // da doppia coppia in su (era da tris)
   },
 }
 
