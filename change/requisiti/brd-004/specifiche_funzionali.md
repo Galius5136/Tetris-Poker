@@ -2,7 +2,7 @@
 
 **Change:** sfida asincrona tra giocatori + punteggi degli amici in UI
 **Fase Change Management:** 3 — Generazione specifiche funzionali
-**Stato:** 🟡 v1 da validare (Quality Gate specifiche, fase 7)
+**Stato:** 🟢 v1.1 — domande residue risolte internamente; pronta per il Quality Gate (fase 7)
 **Decisioni stakeholder recepite (vedi `qa-chiarimenti.md`):**
 - Canale: **Opzione A — codice/link di sfida, serverless** (nessun backend).
 - Metrica del confronto: **tavolo raggiunto**.
@@ -57,8 +57,10 @@ più, l'interfaccia mostra **i punteggi degli amici**.
 - **RF-4** — Il sistema genera un **codice sfida** che incapsula: condizioni di
   gioco del run, **i potenziamenti meta-shop attivi dello sfidante**, il
   **tavolo raggiunto**, nickname e codice amico dello sfidante.
-- **RF-5** — Il giocatore può **copiare** il codice/link e condividerlo con
-  qualunque mezzo esterno (chat, email…). *Nessun invio avviene dall'app.*
+- **RF-5** — La sfida si condivide come **link "apri e gioca"** (mezzo
+  principale) **e** come **codice testuale** copiabile (fallback, per i canali
+  che rimuovono i link). Il giocatore copia e invia con qualunque mezzo esterno
+  (chat, email…). *Nessun invio avviene dall'app.* (vedi DI-3)
 
 ### Accettazione di una sfida
 - **RF-6** — Dalla schermata iniziale, il giocatore può **incollare un codice
@@ -105,9 +107,9 @@ più, l'interfaccia mostra **i punteggi degli amici**.
 - **RC-1** — Metrica: **tavolo raggiunto**.
 - **RC-2** — **Vinta** se l'avversario raggiunge un tavolo **strettamente
   superiore**; **Persa** se inferiore; **Pareggio** se uguale.
-- **RC-3 (da validare)** — Spareggio a parità di tavolo: si propone come
-  tie-break il **bankroll/progresso** del tavolo corrente. *Decisione da
-  confermare allo stakeholder.*
+- **RC-3** — Spareggio a parità di tavolo: vince chi ha più **fiches totali del
+  run** (bankroll + progresso del tavolo corrente — lo stesso valore mostrato a
+  Game Over). Se ancora identico → **Pareggio**. (vedi DI-1)
 
 ## 7. Casi limite ed errori
 
@@ -127,8 +129,8 @@ più, l'interfaccia mostra **i punteggi degli amici**.
 - **NF-2** — Funziona **offline**.
 - **NF-3 (limite accettato)** — Il risultato è **auto-dichiarato** dentro il
   codice: senza server **non è garantito anti-cheat** (un utente esperto può
-  alterare un codice). Accettabile per una feature **social/amichevole**, non
-  competitiva-ranked. Da accettare formalmente allo stakeholder.
+  alterare un codice). Accettato come **decisione interna** per una feature
+  **social/amichevole**, non competitiva-ranked. (vedi DI-2)
 
 ## 9. Fuori scope (CR-004)
 
@@ -148,12 +150,24 @@ più, l'interfaccia mostra **i punteggi degli amici**.
 - **Versionamento del codice sfida:** serve un meccanismo per gestire
   l'incompatibilità tra versioni (vedi CE-2).
 
-## 11. Domande aperte (residue, minori)
+## 11. Decisioni interne (Analista + Sviluppatore)
 
-1. **RC-3**: tie-break a parità di tavolo (proposta: bankroll). Confermare.
-2. **NF-3**: accettazione formale del limite anti-cheat.
-3. Forma preferita della condivisione: **codice testuale**, **link**, o entrambi
-   (impatta UX; dettaglio tecnico in fase 4).
+Risolte dal team (non richiedono il cliente: sono dettagli di prodotto/UX
+nell'ambito già approvato in Q&A). Tracciate qui per il Quality Gate.
+
+- **DI-1 — Spareggio a parità di tavolo:** tie-break sulle **fiches totali del
+  run** (bankroll + progresso); se identiche → Pareggio. *Motivazione:* è la
+  misura più fine di "quanto bene hai giocato" entro lo stesso tavolo, ed è già
+  un dato mostrato a Game Over (nessun nuovo concetto per l'utente).
+- **DI-2 — Limite anti-cheat:** accettato. *Motivazione:* la feature è social e
+  asincrona senza server (Opzione A); garantire l'anti-cheat richiederebbe un
+  backend (fuori scope). In fase tecnica si può aggiungere un **controllo di
+  integrità leggero** (per intercettare codici corrotti/accidentali, non un
+  attaccante determinato).
+- **DI-3 — Forma della condivisione:** **link "apri e gioca" come principale +
+  codice testuale come fallback**. *Motivazione:* il link è l'UX migliore (un
+  tap); il codice testuale garantisce il funzionamento dove i link vengono
+  rimossi/non cliccabili. Entrambi trasportano lo stesso contenuto.
 
 ---
 
