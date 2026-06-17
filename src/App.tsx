@@ -707,6 +707,11 @@ function App() {
     const fire = (key: string) => setState((s) => reduceKey(s, key))
 
     function onDown(e: KeyboardEvent) {
+      // Se stai scrivendo in un campo (es. nickname), lascia passare i tasti:
+      // d/x/p/c/m sono comandi di gioco e altrimenti non verrebbero digitati.
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable))
+        return
       if (!HANDLED.includes(e.key)) return
       e.preventDefault()
       if (e.repeat) return // la ripetizione la gestiamo noi
